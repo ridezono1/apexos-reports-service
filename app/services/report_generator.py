@@ -63,8 +63,12 @@ class ReportGenerator:
             # Use timedelta for more reliable date calculation
             from datetime import timedelta
             start_date = today - timedelta(days=270)  # Approximately 9 months
+        elif analysis_period == "24_months":
+            # Use timedelta for more reliable date calculation
+            from datetime import timedelta
+            start_date = today - timedelta(days=730)  # Approximately 24 months
         else:
-            raise ValueError("Analysis period must be '6_months' or '9_months'")
+            raise ValueError("Analysis period must be '6_months', '9_months', or '24_months'")
         
         # Initialize report status
         self.report_status[report_id] = {
@@ -114,8 +118,12 @@ class ReportGenerator:
             # Use timedelta for more reliable date calculation
             from datetime import timedelta
             start_date = today - timedelta(days=270)  # Approximately 9 months
+        elif analysis_period == "24_months":
+            # Use timedelta for more reliable date calculation
+            from datetime import timedelta
+            start_date = today - timedelta(days=730)  # Approximately 24 months
         else:
-            raise ValueError("Analysis period must be '6_months' or '9_months'")
+            raise ValueError("Analysis period must be '6_months', '9_months', or '24_months'")
         
         # Initialize report status
         self.report_status[report_id] = {
@@ -166,8 +174,12 @@ class ReportGenerator:
             # Use timedelta for more reliable date calculation
             from datetime import timedelta
             start_date = today - timedelta(days=270)  # Approximately 9 months
+        elif analysis_period == "24_months":
+            # Use timedelta for more reliable date calculation
+            from datetime import timedelta
+            start_date = today - timedelta(days=730)  # Approximately 24 months
         else:
-            raise ValueError("Analysis period must be '6_months' or '9_months'")
+            raise ValueError("Analysis period must be '6_months', '9_months', or '24_months'")
         
         # Initialize report status
         self.report_status[report_id] = {

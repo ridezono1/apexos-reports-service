@@ -112,9 +112,9 @@ class WeatherDataService:
             # Calculate period length
             period_days = (end_date - start_date).days
             
-            # Validate period is 6 or 9 months
-            if not (180 <= period_days <= 185 or 270 <= period_days <= 275):
-                raise ValueError("Analysis period must be exactly 6 months or 9 months")
+            # Validate period is 6, 9, or 24 months
+            if not (180 <= period_days <= 185 or 270 <= period_days <= 275 or 720 <= period_days <= 735):
+                raise ValueError("Analysis period must be exactly 6 months, 9 months, or 24 months")
             
             # For 6 or 9 month periods, fetch data in chunks
             historical_data = await self._get_extended_historical_weather(
