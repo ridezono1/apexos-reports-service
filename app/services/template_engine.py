@@ -9,6 +9,7 @@ import logging
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.core.config import settings
+from app.services.heatmap_service import get_heatmap_service
 
 logger = logging.getLogger(__name__)
 
