@@ -1,0 +1,68 @@
+# Reports Service Microservice Configuration
+# This file defines the microservice configuration for the monorepo
+
+name: reports-service
+version: 1.0.0
+description: "Scalable microservice for generating professional reports (weather, spatial, and more)"
+
+# Service Configuration
+service:
+  port: 8000
+  host: "0.0.0.0"
+  protocol: "http"
+  
+# API Configuration
+api:
+  prefix: "/api/v1"
+  version: "v1"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+# Health Check Configuration
+health:
+  endpoint: "/health"
+  interval: 30s
+  timeout: 5s
+  
+# Dependencies
+dependencies:
+  - name: "backend"
+    service: "apexos-backend"
+    endpoints:
+      - "/api/v1/weather"
+      - "/api/v1/spatial"
+  
+# Environment Configuration
+environment:
+  development:
+    debug: true
+    log_level: "debug"
+  staging:
+    debug: false
+    log_level: "info"
+  production:
+    debug: false
+    log_level: "warning"
+
+# Deployment Configuration
+deployment:
+  replicas: 2
+  resources:
+    cpu: "500m"
+    memory: "512Mi"
+  scaling:
+    min_replicas: 1
+    max_replicas: 5
+    target_cpu: 70
+    
+# Monitoring
+monitoring:
+  metrics:
+    enabled: true
+    endpoint: "/metrics"
+  tracing:
+    enabled: true
+    service_name: "reports-service"
+  logging:
+    level: "info"
+    format: "json"

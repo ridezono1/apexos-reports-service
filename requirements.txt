@@ -1,0 +1,42 @@
+# FastAPI and ASGI server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Template engine
+jinja2>=3.1.0
+
+# PDF generation (SkyLink uses ReportLab)
+reportlab>=4.0.0
+weasyprint>=60.0
+
+# Excel generation
+openpyxl>=3.1.0
+
+# Map generation (SkyLink capabilities)
+folium>=0.14.0
+requests>=2.31.0
+
+# Data validation
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+
+# HTTP client
+httpx>=0.25.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Image processing for maps
+Pillow>=10.0.0
+
+# Geocoding dependencies
+googlemaps>=4.10.0
+
+# Error tracking
+sentry-sdk>=1.40.0
+
+# Development dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+isort>=5.12.0

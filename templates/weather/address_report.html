@@ -1,0 +1,732 @@
+{% include 'logo_data.jinja2' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Weather Report - {{ property_info.address }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.75in;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #2c3e50;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header with Logo - Purple gradient banner */
+        .report-header {
+            background: linear-gradient(90deg, #6B46C1 0%, #805AD5 100%);
+            padding: 20px 30px;
+            margin: -0.75in -0.75in 30px -0.75in;
+            color: white;
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .header-table td {
+            vertical-align: middle;
+            padding: 5px;
+        }
+
+        .header-logo-cell {
+            width: 100px;
+        }
+
+        .header-logo {
+            width: 60px;
+            height: 60px;
+            display: block;
+            object-fit: contain;
+        }
+
+        .header-title-cell {
+            padding-left: 15px;
+        }
+
+        .report-header h1 {
+            color: white;
+            font-size: 20pt;
+            font-weight: 400;
+            margin: 0 0 5px 0;
+            letter-spacing: 0.3px;
+        }
+
+        .report-header .period {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 11pt;
+            font-weight: 300;
+            margin: 0;
+        }
+
+        .header-page-cell {
+            text-align: right;
+            width: 120px;
+        }
+
+        .page-number {
+            font-weight: 300;
+            margin: 0;
+            font-size: 10pt;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Dynamic page counter for PDF (WeasyPrint) */
+        @page {
+            @bottom-right {
+                content: counter(page) " of " counter(pages);
+            }
+        }
+
+        /* Property Information Box */
+        .property-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .property-section h2 {
+            margin: 0 0 15px 0;
+            font-size: 18pt;
+            font-weight: 400;
+        }
+
+        .property-address {
+            font-size: 13pt;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .property-coordinates {
+            font-size: 10pt;
+            opacity: 0.9;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Maps Section */
+        .maps-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+
+        .map-box {
+            background: #ffffff;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .map-title {
+            background: #34495e;
+            color: white;
+            padding: 12px 15px;
+            margin: 0;
+            font-size: 12pt;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .map-box img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Risk Assessment Cards */
+        .risk-section {
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            font-size: 18pt;
+            font-weight: 400;
+            margin: 0 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ecf0f1;
+        }
+
+        .risk-overview {
+            background: #ffffff;
+            border-left: 5px solid #3498db;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .risk-overview.high {
+            border-left-color: #e74c3c;
+            background: #fef5f5;
+        }
+
+        .risk-overview.medium {
+            border-left-color: #f39c12;
+            background: #fef9f3;
+        }
+
+        .risk-overview.low {
+            border-left-color: #27ae60;
+            background: #f0f9f4;
+        }
+
+        .risk-score {
+            font-size: 16pt;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .risk-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .risk-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .risk-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 12pt;
+            color: #2c3e50;
+            text-transform: capitalize;
+        }
+
+        .risk-level-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 9pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .risk-level-badge.high {
+            background: #fee;
+            color: #e74c3c;
+        }
+
+        .risk-level-badge.medium {
+            background: #fef9f3;
+            color: #f39c12;
+        }
+
+        .risk-level-badge.low {
+            background: #f0f9f4;
+            color: #27ae60;
+        }
+
+        .risk-factors {
+            margin-top: 10px;
+            font-size: 9pt;
+            color: #7f8c8d;
+        }
+
+        .risk-factors li {
+            margin: 4px 0;
+        }
+
+        /* Weather Summary */
+        .weather-summary {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .weather-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .weather-stat {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }
+
+        .weather-stat-label {
+            font-size: 9pt;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .weather-stat-value {
+            font-size: 16pt;
+            font-weight: 600;
+        }
+
+        /* Recommendations Section */
+        .recommendations {
+            background: #fff;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .recommendations h3 {
+            color: #3498db;
+            margin: 0 0 15px 0;
+            font-size: 14pt;
+        }
+
+        .recommendations ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .recommendations li {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+
+        /* Business Impact */
+        .business-impact {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .impact-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .impact-item {
+            text-align: center;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e8e8e8;
+        }
+
+        .impact-label {
+            font-size: 9pt;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .impact-value {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        /* Footer */
+        .report-footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #95a5a6;
+            font-size: 9pt;
+        }
+
+        .report-footer p {
+            margin: 5px 0;
+        }
+
+        .footer-logo {
+            max-width: 80px;
+            opacity: 0.8;
+            margin-top: 10px;
+            background: linear-gradient(90deg, #6B46C1 0%, #805AD5 100%);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        /* Page Breaks */
+        .page-break {
+            page-break-before: always;
+        }
+
+        /* Alerts Section */
+        .alerts-section {
+            margin: 30px 0;
+        }
+
+        .alert-box {
+            border-left: 4px solid #f39c12;
+            background: #fff8e1;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .alert-box.high {
+            border-left-color: #e74c3c;
+            background: #ffebee;
+        }
+
+        .alert-box.medium {
+            border-left-color: #f39c12;
+            background: #fff8e1;
+        }
+
+        .alert-severity {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 9pt;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .alert-message {
+            font-size: 11pt;
+            margin: 5px 0;
+        }
+
+        .alert-action {
+            font-size: 10pt;
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="report-header">
+        <table class="header-table">
+            <tr>
+                <td class="header-logo-cell">
+                    {% if logo_base64 or default_logo_base64 %}
+                    <img class="header-logo" src="data:image/png;base64,{{ logo_base64 or default_logo_base64 }}" alt="ApexOS">
+                    {% endif %}
+                </td>
+                <td class="header-title-cell">
+                    <h1>Weather History Report</h1>
+                    <p class="period">Period: {{ analysis_period.start }} to {{ analysis_period.end }}</p>
+                </td>
+                <td class="header-page-cell">
+                    <p class="page-number"></p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Property Information -->
+    <div class="property-section">
+        <h2 style="margin: 0 0 15px 0; font-size: 16pt; font-weight: 400;">Property Location</h2>
+        <div class="property-address">
+            {{ property_info.geocoded_address }}
+        </div>
+        <div class="property-coordinates">
+            Coordinates: {{ property_info.coordinates[0] | default(0) | round(6) }}, {{ property_info.coordinates[1] | default(0) | round(6) }}
+        </div>
+    </div>
+
+    <!-- Maps Section -->
+    <div class="maps-container">
+        <div class="map-box">
+            <h3 class="map-title">🛰️ Satellite View</h3>
+            <img src="data:image/png;base64,{{ satellite_map_base64 }}" alt="Satellite Map">
+        </div>
+        <div class="map-box">
+            <h3 class="map-title">🗺️ Street Map</h3>
+            <img src="data:image/png;base64,{{ street_map_base64 }}" alt="Street Map">
+        </div>
+    </div>
+
+    <!-- Weather Summary Table -->
+    <div class="weather-summary-section">
+        <h2 class="section-title">Weather Summary</h2>
+        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
+                <thead>
+                    <tr style="background: #34495e; color: white;">
+                        <th style="padding: 12px; text-align: left; font-weight: 500;">Metric</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Value</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Unit</th>
+                        <th style="padding: 12px; text-align: left; font-weight: 500;">Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">Max Wind Speed</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.max_wind_speed | default(0) }}</td>
+                        <td style="padding: 10px; text-align: center;">mph</td>
+                        <td style="padding: 10px;">Peak wind gust</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">Weather Events</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.total_events | default(0) }}</td>
+                        <td style="padding: 10px; text-align: center;">count</td>
+                        <td style="padding: 10px;">Total events</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">Severe Weather Events</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.severe_events | default(0) }}</td>
+                        <td style="padding: 10px; text-align: center;">count</td>
+                        <td style="padding: 10px;">Hail, tornado, etc.</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">Hail Events</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.hail_events | default(0) }}</td>
+                        <td style="padding: 10px; text-align: center;">count</td>
+                        <td style="padding: 10px;">Detected hail occurrences</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">Max Hail Size</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.max_hail_size | default(0) }}</td>
+                        <td style="padding: 10px; text-align: center;">inches</td>
+                        <td style="padding: 10px;">Largest recorded</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; font-weight: 500;">Temperature Range</td>
+                        <td style="padding: 10px; text-align: center;">{{ weather_summary.temp_range | default('N/A') }}</td>
+                        <td style="padding: 10px; text-align: center;">°F</td>
+                        <td style="padding: 10px;">Min to Max</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Severe Weather History Table -->
+    <div class="severe-weather-section">
+        <h2 class="section-title">Severe Weather History</h2>
+        {% if weather_summary.severe_weather_events and weather_summary.severe_weather_events|length > 0 %}
+        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
+                <thead>
+                    <tr style="background: #e74c3c; color: white;">
+                        <th style="padding: 12px; text-align: left; font-weight: 500;">Date</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Event Type</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Duration</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Meteorologist</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Magnitude</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Algorithm Magnitude</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in weather_summary.severe_weather_events %}
+                    <tr style="border-bottom: 1px solid #e8e8e8;">
+                        <td style="padding: 10px; font-weight: 500;">{{ event.date_formatted or event.date }}</td>
+                        <td style="padding: 10px; text-align: center;">{{ event.type | title }}</td>
+                        <td style="padding: 10px; text-align: center;">{{ event.duration }}</td>
+                        <td style="padding: 10px; text-align: center;">{{ event.severity | title }}</td>
+                        <td style="padding: 10px; text-align: center;">{{ event.magnitude }}</td>
+                        <td style="padding: 10px; text-align: center;">{{ event.algorithm_magnitude }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 30px;">
+            <p style="color: #7f8c8d; font-size: 12pt; margin: 0;">No severe weather events recorded during the {{ analysis_period.start }} to {{ analysis_period.end }} period.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Risk Assessment Overview -->
+    <div class="risk-section">
+        <h2 class="section-title">Risk Assessment Summary</h2>
+
+        <div class="risk-overview {{ risk_assessment.risk_level }}">
+            <div class="risk-score">
+                Overall Risk Level:
+                <span class="risk-level-badge {{ risk_assessment.risk_level }}">
+                    {{ risk_assessment.risk_level | upper }}
+                </span>
+            </div>
+            <p><strong>Risk Score:</strong> {{ (risk_assessment.overall_risk_score | default(0) * 100) | round }}%</p>
+            <p>This property has been assessed for weather-related risks including hail, wind, flooding, and tornado activity based on historical data from {{ analysis_period.start }} to {{ analysis_period.end }}.</p>
+        </div>
+
+        <!-- Individual Risk Factors -->
+        <div class="risk-details">
+            {% for risk_type, risk_data in risk_assessment.risk_details.items() %}
+            <div class="risk-card">
+                <h4>{{ risk_type | replace('_', ' ') | title }}</h4>
+                <span class="risk-level-badge {{ risk_data.level }}">{{ risk_data.level | upper }}</span>
+                <p style="margin: 10px 0; font-size: 10pt;">Score: {{ (risk_data.score | default(0) * 100) | round }}%</p>
+                {% if risk_data.factors %}
+                <ul class="risk-factors">
+                    {% for factor in risk_data.factors %}
+                    <li>{{ factor }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Active Alerts -->
+    {% if location_alerts %}
+    <div class="alerts-section">
+        <h2 class="section-title">Active Weather Alerts</h2>
+        {% for alert in location_alerts %}
+        <div class="alert-box {{ alert.severity }}">
+            <div class="alert-severity" style="color: {% if alert.severity == 'high' %}#e74c3c{% elif alert.severity == 'medium' %}#f39c12{% else %}#3498db{% endif %}">
+                {{ alert.severity | upper }} - {{ alert.type | replace('_', ' ') | title }}
+            </div>
+            <div class="alert-message">{{ alert.message }}</div>
+            <div class="alert-action">Recommended Action: {{ alert.action }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Recommendations -->
+    {% if risk_assessment.risk_recommendations %}
+    <div class="recommendations">
+        <h3>🎯 Risk Mitigation Recommendations</h3>
+        <ul>
+            {% for recommendation in risk_assessment.risk_recommendations %}
+            <li>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Page Break for Business Analysis -->
+    <div class="page-break"></div>
+
+    <!-- Business Impact Analysis -->
+    <div class="business-impact">
+        <h2 class="section-title">Business Impact Analysis</h2>
+
+        <div class="impact-grid">
+            <div class="impact-item">
+                <div class="impact-label">Impact Level</div>
+                <div class="impact-value">{{ business_impact.impact_level | title }}</div>
+            </div>
+            <div class="impact-item">
+                <div class="impact-label">Impact Score</div>
+                <div class="impact-value">{{ (business_impact.impact_score | default(0) * 100) | round }}%</div>
+            </div>
+            <div class="impact-item">
+                <div class="impact-label">Lead Priority</div>
+                <div class="impact-value">{{ lead_qualification.lead_level | title }}</div>
+            </div>
+        </div>
+
+        {% if business_impact.business_recommendations %}
+        <div style="margin-top: 20px;">
+            <h3 style="font-size: 13pt; color: #2c3e50;">Business Recommendations</h3>
+            <ul>
+                {% for rec in business_impact.business_recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lead Qualification -->
+    <div class="risk-overview {{ lead_qualification.lead_level }}">
+        <h3 style="margin: 0 0 15px 0; font-size: 14pt;">Lead Qualification</h3>
+        <p><strong>Lead Type:</strong> {{ lead_qualification.lead_type | replace('_', ' ') | title }}</p>
+        <p><strong>Lead Score:</strong> {{ (lead_qualification.lead_score | default(0) * 100) | round }}%</p>
+        <p><strong>Qualification Reason:</strong> {{ lead_qualification.qualification_reason }}</p>
+        {% if lead_qualification.lead_factors %}
+        <ul style="margin-top: 10px;">
+            {% for factor in lead_qualification.lead_factors %}
+            <li>{{ factor }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <!-- Historical Context -->
+    {% if historical_context %}
+    <div style="margin-top: 30px;">
+        <h2 class="section-title">Historical Weather Analysis</h2>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+            <h3 style="font-size: 13pt; margin-top: 0;">📊 Analysis Period: {{ analysis_period.start }} to {{ analysis_period.end }}</h3>
+
+            {% if historical_context.temperature_analysis %}
+            <div style="margin: 15px 0;">
+                <h4 style="font-size: 11pt; color: #2c3e50;">Temperature Trends</h4>
+                <p><strong>Trend:</strong> {{ historical_context.temperature_analysis.trend | title }}</p>
+                {% if historical_context.temperature_analysis.average %}
+                <p><strong>Average:</strong> {{ historical_context.temperature_analysis.average | round(1) }}°F</p>
+                {% endif %}
+                {% if historical_context.temperature_analysis.range %}
+                <p><strong>Range:</strong> {{ historical_context.temperature_analysis.range.min | default(0) | round(1) }}°F - {{ historical_context.temperature_analysis.range.max | default(0) | round(1) }}°F</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if historical_context.precipitation_analysis %}
+            <div style="margin: 15px 0;">
+                <h4 style="font-size: 11pt; color: #2c3e50;">Precipitation Patterns</h4>
+                <p><strong>Pattern:</strong> {{ historical_context.precipitation_analysis.pattern | title }}</p>
+                <p><strong>Total Precipitation:</strong> {{ historical_context.precipitation_analysis.total_precipitation | default(0) | round(1) }}mm</p>
+                <p><strong>Rainy Days:</strong> {{ historical_context.precipitation_analysis.rainy_days }}</p>
+                <p><strong>Heavy Rain Days:</strong> {{ historical_context.precipitation_analysis.heavy_rain_days }}</p>
+            </div>
+            {% endif %}
+
+            {% if historical_context.event_frequency %}
+            <div style="margin: 15px 0;">
+                <h4 style="font-size: 11pt; color: #2c3e50;">Weather Event Frequency</h4>
+                <p><strong>Frequency:</strong> {{ historical_context.event_frequency.frequency | title }}</p>
+                <p><strong>Total Events:</strong> {{ historical_context.event_frequency.total_events }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Disclaimer -->
+    <div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e8e8e8;">
+        <h3 style="font-size: 12pt; margin: 0 0 10px 0; color: #2c3e50;">Disclaimer</h3>
+        <p style="font-size: 9pt; line-height: 1.5; margin: 5px 0; color: #555;">
+            This report is provided "as is" for informational purposes only and is not intended as professional advice. Weather data is sourced from NOAA and other public sources. ApexOS makes no warranties regarding the completeness or accuracy of this report. Users assume all responsibility for decisions based on this information. This report does not constitute an expert witness or insurance claim assessment.
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="report-footer">
+        {% if logo_base64 or default_logo_base64 %}
+        <img src="data:image/png;base64,{{ logo_base64 or default_logo_base64 }}" alt="Logo" class="footer-logo">
+        {% endif %}
+        <p><strong>ApexOS Weather Intelligence Report</strong></p>
+        <p>Powered by NOAA weather data and advanced risk assessment algorithms.</p>
+        <p>For questions or additional information, please contact your service provider.</p>
+        <p style="margin-top: 15px; font-size: 8pt;">Generated: {{ generated_at }}</p>
+    </div>
+</body>
+</html>

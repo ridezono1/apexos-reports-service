@@ -1,0 +1,663 @@
+{% include 'logo_data.jinja2' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spatial Weather Report - {{ boundary_info.name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.75in;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #2c3e50;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header with Logo */
+        .report-header {
+            text-align: center;
+            padding: 20px 0 30px 0;
+            border-bottom: 3px solid #9b59b6;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            max-width: 120px;
+            height: auto;
+            margin-bottom: 15px;
+        }
+
+        .report-header h1 {
+            color: #2c3e50;
+            font-size: 26pt;
+            font-weight: 300;
+            margin: 0 0 10px 0;
+            letter-spacing: -0.5px;
+        }
+
+        .report-header .subtitle {
+            color: #7f8c8d;
+            font-size: 14pt;
+            font-weight: 300;
+            margin: 0;
+        }
+
+        .report-header .generated-date {
+            color: #95a5a6;
+            font-size: 10pt;
+            margin-top: 10px;
+        }
+
+        /* Boundary Information Box */
+        .boundary-section {
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .boundary-section h2 {
+            margin: 0 0 15px 0;
+            font-size: 18pt;
+            font-weight: 400;
+        }
+
+        .boundary-details {
+            font-size: 13pt;
+            line-height: 1.6;
+        }
+
+        .boundary-stat {
+            display: inline-block;
+            margin-right: 20px;
+            opacity: 0.95;
+        }
+
+        .boundary-stat strong {
+            font-weight: 600;
+        }
+
+        /* Maps Section */
+        .maps-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+
+        .map-box {
+            background: #ffffff;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .map-title {
+            background: #8e44ad;
+            color: white;
+            padding: 12px 15px;
+            margin: 0;
+            font-size: 12pt;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .map-box img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Section Title */
+        .section-title {
+            color: #2c3e50;
+            font-size: 18pt;
+            font-weight: 400;
+            margin: 30px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ecf0f1;
+        }
+
+        /* Weather Summary Grid */
+        .weather-summary {
+            background: linear-gradient(135deg, #16a085 0%, #1abc9c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .weather-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .weather-stat {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }
+
+        .weather-stat-label {
+            font-size: 9pt;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .weather-stat-value {
+            font-size: 16pt;
+            font-weight: 600;
+        }
+
+        /* Risk Assessment */
+        .risk-section {
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+
+        .risk-overview {
+            background: #ffffff;
+            border-left: 5px solid #3498db;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .risk-overview.high {
+            border-left-color: #e74c3c;
+            background: #fef5f5;
+        }
+
+        .risk-overview.medium {
+            border-left-color: #f39c12;
+            background: #fef9f3;
+        }
+
+        .risk-overview.low {
+            border-left-color: #27ae60;
+            background: #f0f9f4;
+        }
+
+        .risk-score {
+            font-size: 16pt;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .risk-level-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 9pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .risk-level-badge.high {
+            background: #fee;
+            color: #e74c3c;
+        }
+
+        .risk-level-badge.medium {
+            background: #fef9f3;
+            color: #f39c12;
+        }
+
+        .risk-level-badge.low {
+            background: #f0f9f4;
+            color: #27ae60;
+        }
+
+        /* Heat Map Zones */
+        .heat-map-section {
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+
+        .zone-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .zone-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .zone-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 12pt;
+            color: #2c3e50;
+        }
+
+        .zone-card .zone-value {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #8e44ad;
+            margin: 10px 0;
+        }
+
+        /* Lead Opportunities */
+        .lead-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }
+
+        .lead-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .lead-card {
+            background: white;
+            border-left: 4px solid #9b59b6;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .lead-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 11pt;
+            color: #2c3e50;
+        }
+
+        .lead-count {
+            font-size: 20pt;
+            font-weight: 700;
+            color: #9b59b6;
+        }
+
+        /* Business Impact */
+        .business-impact {
+            background: #fff;
+            border: 2px solid #16a085;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .business-impact h3 {
+            color: #16a085;
+            margin: 0 0 15px 0;
+            font-size: 14pt;
+        }
+
+        .impact-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .impact-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .impact-label {
+            font-size: 9pt;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .impact-value {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        /* Route Optimization */
+        .route-section {
+            margin: 30px 0;
+        }
+
+        .route-card {
+            background: white;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .route-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+
+        .route-stat {
+            text-align: center;
+        }
+
+        .route-stat-value {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #3498db;
+        }
+
+        .route-stat-label {
+            font-size: 9pt;
+            color: #7f8c8d;
+            text-transform: uppercase;
+        }
+
+        /* Weather Events Table */
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .events-table th,
+        .events-table td {
+            border: 1px solid #bdc3c7;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .events-table th {
+            background-color: #34495e;
+            color: white;
+            font-weight: 600;
+        }
+
+        .events-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        /* Footer */
+        .report-footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #95a5a6;
+            font-size: 9pt;
+        }
+
+        .report-footer p {
+            margin: 5px 0;
+        }
+
+        .footer-logo {
+            max-width: 80px;
+            opacity: 0.5;
+            margin-top: 10px;
+        }
+
+        /* Page Breaks */
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="report-header">
+        {% if logo_base64 or default_logo_base64 %}
+        <img src="data:image/png;base64,{{ logo_base64 or default_logo_base64 }}" alt="Company Logo" class="logo">
+        {% endif %}
+        <h1>Spatial Weather Analysis Report</h1>
+        <p class="subtitle">Boundary-Based Weather Intelligence</p>
+        <p class="generated-date">Generated on {{ generated_at }}</p>
+    </div>
+
+    <!-- Boundary Information -->
+    <div class="boundary-section">
+        <h2>🗺️ Analysis Boundary: {{ boundary_info.name }}</h2>
+        <div class="boundary-details">
+            <div class="boundary-stat">
+                <strong>Type:</strong> {{ boundary_info.type | title }}
+            </div>
+            <div class="boundary-stat">
+                <strong>Area:</strong> {{ boundary_info.area_sq_km | round(2) }} km²
+            </div>
+            <div class="boundary-stat">
+                <strong>Analysis Points:</strong> {{ boundary_info.grid_points }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Maps Section -->
+    <div class="maps-container">
+        <div class="map-box">
+            <h3 class="map-title">🛰️ Satellite Overview</h3>
+            <img src="data:image/png;base64,{{ satellite_map_base64 }}" alt="Satellite Map">
+        </div>
+        <div class="map-box">
+            <h3 class="map-title">📍 Boundary Map</h3>
+            <img src="data:image/png;base64,{{ boundary_map_base64 }}" alt="Boundary Map">
+        </div>
+    </div>
+
+    <!-- Weather Summary -->
+    <div class="weather-summary">
+        <h2 style="margin: 0 0 15px 0; font-size: 16pt; font-weight: 400;">Area Weather Summary</h2>
+        <div class="weather-grid">
+            <div class="weather-stat">
+                <div class="weather-stat-label">Avg Temp</div>
+                <div class="weather-stat-value">{{ weather_summary.average_temperature | round(1) }}°F</div>
+            </div>
+            <div class="weather-stat">
+                <div class="weather-stat-label">Total Events</div>
+                <div class="weather-stat-value">{{ weather_summary.total_events }}</div>
+            </div>
+            <div class="weather-stat">
+                <div class="weather-stat-label">Severe Events</div>
+                <div class="weather-stat-value">{{ weather_summary.severe_events }}</div>
+            </div>
+            <div class="weather-stat">
+                <div class="weather-stat-label">High Risk Zones</div>
+                <div class="weather-stat-value">{{ weather_summary.high_risk_zones or 0 }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Assessment -->
+    <div class="risk-section">
+        <h2 class="section-title">Spatial Risk Assessment</h2>
+
+        <div class="risk-overview {{ risk_assessment.overall_risk_level }}">
+            <div class="risk-score">
+                Overall Area Risk Level:
+                <span class="risk-level-badge {{ risk_assessment.overall_risk_level }}">
+                    {{ risk_assessment.overall_risk_level | upper }}
+                </span>
+            </div>
+            <p><strong>Risk Score:</strong> {{ (risk_assessment.overall_risk_score * 100) | round }}%</p>
+            <p>This spatial analysis assessed {{ boundary_info.grid_points }} points across {{ boundary_info.area_sq_km | round(2) }} km² from {{ analysis_period.start }} to {{ analysis_period.end }}.</p>
+        </div>
+
+        <!-- Risk Zones -->
+        {% if risk_assessment.risk_zones %}
+        <div class="zone-grid">
+            {% for zone in risk_assessment.risk_zones[:4] %}
+            <div class="zone-card">
+                <h4>{{ zone.name or 'Zone ' ~ loop.index }}</h4>
+                <span class="risk-level-badge {{ zone.risk_level }}">{{ zone.risk_level | upper }}</span>
+                <div class="zone-value">{{ (zone.risk_score * 100) | round }}%</div>
+                <p style="font-size: 10pt; color: #7f8c8d; margin: 5px 0 0 0;">
+                    {{ zone.primary_risk_factor or 'Multiple factors' }}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lead Opportunities -->
+    {% if lead_opportunities %}
+    <div class="lead-section">
+        <h2 class="section-title">Lead Opportunities</h2>
+
+        <div class="lead-grid">
+            <div class="lead-card">
+                <h4>High Priority Leads</h4>
+                <div class="lead-count">{{ lead_opportunities.high_priority_count or 0 }}</div>
+                <p style="font-size: 9pt; color: #7f8c8d; margin: 5px 0 0 0;">Properties requiring immediate attention</p>
+            </div>
+            <div class="lead-card">
+                <h4>Medium Priority</h4>
+                <div class="lead-count">{{ lead_opportunities.medium_priority_count or 0 }}</div>
+                <p style="font-size: 9pt; color: #7f8c8d; margin: 5px 0 0 0;">Preventive maintenance opportunities</p>
+            </div>
+            <div class="lead-card">
+                <h4>Total Addressable</h4>
+                <div class="lead-count">{{ lead_opportunities.total_leads or 0 }}</div>
+                <p style="font-size: 9pt; color: #7f8c8d; margin: 5px 0 0 0;">All qualified leads in area</p>
+            </div>
+        </div>
+
+        {% if lead_opportunities.recommendations %}
+        <div style="margin-top: 20px;">
+            <h3 style="font-size: 13pt; color: #2c3e50;">Lead Generation Recommendations</h3>
+            <ul>
+                {% for rec in lead_opportunities.recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Business Impact -->
+    {% if business_impact %}
+    <div class="business-impact">
+        <h3>📊 Business Impact Analysis</h3>
+
+        <div class="impact-grid">
+            <div class="impact-item">
+                <div class="impact-label">Impact Level</div>
+                <div class="impact-value">{{ business_impact.impact_level | title }}</div>
+            </div>
+            <div class="impact-item">
+                <div class="impact-label">Market Potential</div>
+                <div class="impact-value">{{ business_impact.market_potential or 'Medium' }}</div>
+            </div>
+            <div class="impact-item">
+                <div class="impact-label">Service Priority</div>
+                <div class="impact-value">{{ business_impact.service_priority or 'Standard' }}</div>
+            </div>
+        </div>
+
+        {% if business_impact.recommendations %}
+        <div style="margin-top: 20px;">
+            <h4 style="font-size: 12pt; color: #16a085;">Business Recommendations</h4>
+            <ul>
+                {% for rec in business_impact.recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Page Break -->
+    <div class="page-break"></div>
+
+    <!-- Route Optimization -->
+    {% if route_optimization %}
+    <div class="route-section">
+        <h2 class="section-title">Route Optimization</h2>
+
+        <div class="route-card">
+            <h3 style="margin: 0 0 15px 0; font-size: 14pt; color: #3498db;">Optimized Service Routes</h3>
+            <p>Recommended routing for efficient coverage of high-priority areas within the boundary.</p>
+
+            <div class="route-stats">
+                <div class="route-stat">
+                    <div class="route-stat-value">{{ route_optimization.total_stops or boundary_info.grid_points }}</div>
+                    <div class="route-stat-label">Total Stops</div>
+                </div>
+                <div class="route-stat">
+                    <div class="route-stat-value">{{ route_optimization.estimated_time_hours | round(1) or 'N/A' }}</div>
+                    <div class="route-stat-label">Est. Hours</div>
+                </div>
+                <div class="route-stat">
+                    <div class="route-stat-value">{{ route_optimization.total_distance_km | round(1) or 'N/A' }}</div>
+                    <div class="route-stat-label">Distance (km)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Weather Events -->
+    {% if weather_events and weather_events|length > 0 %}
+    <div style="margin: 30px 0;">
+        <h2 class="section-title">Significant Weather Events</h2>
+
+        <table class="events-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Event Type</th>
+                    <th>Severity</th>
+                    <th>Affected Area</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in weather_events[:10] %}
+                <tr>
+                    <td>{{ event.date or event.begin_date or 'N/A' }}</td>
+                    <td>{{ event.event or event.event_type or 'N/A' }}</td>
+                    <td>
+                        <span class="risk-level-badge {{ event.severity | lower if event.severity else 'medium' }}">
+                            {{ event.severity or 'Moderate' }}
+                        </span>
+                    </td>
+                    <td>{{ event.location or 'Multiple zones' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="report-footer">
+        {% if logo_base64 or default_logo_base64 %}
+        <img src="data:image/png;base64,{{ logo_base64 or default_logo_base64 }}" alt="Logo" class="footer-logo">
+        {% endif %}
+        <p><strong>Professional Spatial Weather Intelligence</strong></p>
+        <p>This report provides comprehensive weather analysis for strategic planning and business development.</p>
+        <p>For questions or additional information, please contact your service provider.</p>
+        <p style="margin-top: 15px; font-size: 8pt;">Report ID: {{ report_id or 'N/A' }} | Generated: {{ generated_at }}</p>
+    </div>
+</body>
+</html>

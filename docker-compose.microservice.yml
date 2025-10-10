@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  reports-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"  # Different port to avoid conflicts with main backend
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=debug
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    volumes:
+      - ./app:/app/app
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - /tmp/reports:/tmp/reports
+    networks:
+      - apexos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reports-service.rule=Host(`reports.localhost`)"
+      - "traefik.http.services.reports-service.loadbalancer.server.port=8000"
+
+networks:
+  apexos-network:
+    external: true
