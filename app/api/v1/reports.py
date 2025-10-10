@@ -65,14 +65,37 @@ async def generate_spatial_report(request: SpatialWeatherReportCreate):
     """Generate a spatial report with analysis period from current date"""
 
     try:
+        # If boundary geometry is provided, use it directly as polygon type
+        # Otherwise fall back to county lookup by name
+        if request.boundary_geometry and request.boundary_geometry.get("coordinates"):
+            boundary_type = "polygon"
+            # Extract coordinates from GeoJSON geometry
+            coords = request.boundary_geometry["coordinates"]
+            # GeoJSON Polygon has coordinates as [[[lon, lat], ...]]
+            # Convert to [(lat, lon), ...] format
+            if request.boundary_geometry.get("type") == "Polygon" and coords:
+                # First ring of polygon (exterior boundary)
+                coord_ring = coords[0] if isinstance(coords[0], list) else coords
+                boundary_coords = [(point[1], point[0]) for point in coord_ring]
+                boundary_data = {
+                    "coordinates": boundary_coords,
+                    "name": request.boundary_name or request.boundary_id
+                }
+            else:
+                raise ValueError(f"Unsupported geometry type: {request.boundary_geometry.get('type')}")
+        else:
+            # Fallback to county lookup
+            boundary_type = "county"
+            boundary_data = {"name": request.boundary_id}
+
         report_id = await report_generator.generate_spatial_report(
-            boundary_type="county",  # Default boundary type
-            boundary_data={"name": request.boundary_id},
+            boundary_type=boundary_type,
+            boundary_data=boundary_data,
             analysis_period=request.analysis_period.value,
             template="professional",  # Default template for spatial reports
             format=request.generate_pdf and ReportFormat.PDF or ReportFormat.EXCEL,
             options={
-                "boundary_name": request.boundary_id,  # Pass boundary name for template
+                "boundary_name": request.boundary_name or request.boundary_id,  # Use provided name or fallback to ID
                 "risk_factors": request.risk_factors,
                 "storm_types": request.storm_types,
                 "include_risk_assessment": request.include_risk_assessment,

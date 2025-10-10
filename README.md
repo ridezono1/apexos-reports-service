@@ -29,6 +29,50 @@ A scalable FastAPI microservice for generating professional reports. Currently s
 - **Risk Assessment**: Risk zone mapping and analysis
 - **Boundary Visualization**: Administrative boundary analysis
 
+## Git Submodule Information
+
+This reports service is part of the ApexOS monorepo and can be managed as a git submodule.
+
+### Working with the Submodule
+
+```bash
+# Clone the main repository with submodules
+git clone --recursive git@github.com:Apex-Roofer-Technologies/apexos.git
+
+# Or if already cloned, initialize submodules
+git submodule update --init --recursive
+
+# Update submodules to latest
+git submodule update --remote
+
+# Work in the reports-service directory
+cd reports-service
+
+# Make changes and commit
+git add .
+git commit -m "Your changes"
+
+# Push to the submodule repository
+git push origin main
+
+# Go back to main repo and update submodule reference
+cd ..
+git add reports-service
+git commit -m "Update reports-service submodule"
+git push origin main
+```
+
+### Deployment
+
+For Heroku deployment, use the deployment script from the main repository:
+
+```bash
+# From the main ApexOS repository root
+./deploy-reports-service.sh
+```
+
+This script creates a clean deployment with only the reports-service files, avoiding Django conflicts.
+
 ## Quick Start
 
 ### Development

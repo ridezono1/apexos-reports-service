@@ -321,7 +321,12 @@ class SpatialWeatherReportCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     boundary_id: str = Field(min_length=1)
     analysis_period: AnalysisPeriod = Field(..., description="Analysis period: 6 months or 9 months from current date")
-    
+
+    # Optional boundary data - if provided, skip OSM lookup
+    boundary_name: Optional[str] = Field(None, description="Human-readable boundary name")
+    boundary_geometry: Optional[Dict[str, Any]] = Field(None, description="GeoJSON geometry for the boundary")
+    boundary_center: Optional[Dict[str, float]] = Field(None, description="Center point with latitude/longitude")
+
     # Analysis options
     risk_factors: List[str] = Field(default=["hail", "wind", "tornado"])
     storm_types: List[str] = Field(default=["hail", "wind", "tornado"])
@@ -329,15 +334,15 @@ class SpatialWeatherReportCreate(BaseModel):
     include_storm_impact_zones: bool = Field(default=True)
     include_weather_interpolation: bool = Field(default=True)
     include_statistical_summaries: bool = Field(default=True)
-    
+
     # Sub-area analysis
     sub_area_level: str = Field(default="auto", pattern="^(auto|county|city|neighborhood)$")
-    
+
     # Report format options
     include_heat_maps: bool = Field(default=True)
     include_charts: bool = Field(default=True)
     generate_pdf: bool = Field(default=True)
-    
+
     # Weather parameters for interpolation
     weather_parameters: List[str] = Field(
         default=["temperature_high", "temperature_low", "precipitation", "wind_speed"]
