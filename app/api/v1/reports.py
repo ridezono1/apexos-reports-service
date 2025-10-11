@@ -92,7 +92,7 @@ async def generate_spatial_report(request: SpatialWeatherReportCreate):
             boundary_type=boundary_type,
             boundary_data=boundary_data,
             analysis_period=request.analysis_period.value,
-            template="professional",  # Default template for spatial reports
+            template="spatial_report",
             format=request.generate_pdf and ReportFormat.PDF or ReportFormat.EXCEL,
             options={
                 "boundary_name": request.boundary_name or request.boundary_id,  # Use provided name or fallback to ID
