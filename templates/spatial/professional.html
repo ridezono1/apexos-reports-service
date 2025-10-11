@@ -397,7 +397,53 @@
         </div>
     </div>
 
+    <!-- Weather Analysis Charts -->
+    {% if charts %}
+    <div style="page-break-before: always;"></div>
+    <h2 class="section-title">📊 Weather Event Analysis</h2>
+
+    {% if charts.time_series %}
+    <div style="margin: 30px 0;">
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">Events Over Time</h3>
+        <div style="text-align: center;">
+            <img src="{{ charts.time_series }}" alt="Time Series Chart" style="max-width: 100%; height: auto;">
+        </div>
+    </div>
+    {% endif %}
+
+    {% if charts.distribution %}
+    <div style="margin: 30px 0;">
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">Event Type Distribution</h3>
+        <div style="text-align: center;">
+            <img src="{{ charts.distribution }}" alt="Distribution Chart" style="max-width: 100%; height: auto;">
+        </div>
+    </div>
+    {% endif %}
+
+    {% if charts.monthly_breakdown %}
+    <div style="margin: 30px 0;">
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">Monthly Breakdown</h3>
+        <div style="text-align: center;">
+            <img src="{{ charts.monthly_breakdown }}" alt="Monthly Breakdown" style="max-width: 100%; height: auto;">
+        </div>
+    </div>
+    {% endif %}
+
+    {% if charts.heat_map %}
+    <div style="margin: 30px 0; page-break-before: always;">
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">Geographic Heat Map</h3>
+        <div style="text-align: center;">
+            <img src="{{ charts.heat_map }}" alt="Heat Map" style="max-width: 100%; height: auto;">
+        </div>
+        <p style="color: #666; font-size: 10pt; text-align: center; margin-top: 10px;">
+            Red areas indicate higher concentration of weather events
+        </p>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <!-- Weather Summary Stats -->
+    <div style="page-break-before: always;"></div>
     <h2 class="section-title">Weather Summary</h2>
     <div class="stats-grid">
         <div class="stat-card">

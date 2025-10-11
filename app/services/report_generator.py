@@ -19,6 +19,8 @@ from app.services.weather_data_service import get_weather_data_service
 from app.services.geocoding_service import get_geocoding_service
 from app.services.spatial_analysis_service import get_spatial_analysis_service
 from app.services.address_analysis_service import get_address_analysis_service
+from app.services.chart_service import ChartService
+from app.services.map_service import MapService
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +35,12 @@ class ReportGenerator:
         self.geocoding_service = get_geocoding_service()
         self.spatial_analysis_service = get_spatial_analysis_service()
         self.address_analysis_service = get_address_analysis_service()
-        
+        self.chart_service = ChartService()
+        self.map_service = MapService()
+
         # In-memory status tracking
         self.report_status: Dict[str, Dict[str, Any]] = {}
-        
+
         # Ensure temp directory exists
         Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
     
@@ -393,18 +397,21 @@ class ReportGenerator:
         options: Dict[str, Any]
     ):
         """Generate spatial report asynchronously using SkyLink's spatial analysis"""
-        
+
         try:
             # Perform comprehensive spatial analysis
             analysis_period = {
                 "start": start_date.isoformat(),
                 "end": end_date.isoformat()
             }
-            
+
             spatial_analysis = await self.spatial_analysis_service.analyze_spatial_area(
                 boundary_type, boundary_data, analysis_period, options
             )
-            
+
+            # Generate charts and heat maps for spatial reports
+            await self._add_charts_and_maps_to_spatial_data(spatial_analysis, options)
+
             # Render template
             html_content = await self.template_engine.render_spatial_template(
                 template, spatial_analysis, options
@@ -439,6 +446,100 @@ class ReportGenerator:
                 "error_message": str(e)
             })
     
+    async def _add_charts_and_maps_to_spatial_data(
+        self,
+        spatial_analysis: Dict[str, Any],
+        options: Dict[str, Any]  # noqa: ARG002 - Reserved for future chart customization options
+    ):
+        """Generate charts and heat maps and add them to spatial analysis data as base64 images"""
+        import base64
+
+        try:
+            # Extract events from spatial analysis
+            events = spatial_analysis.get("weather_events", [])
+
+            if not events or len(events) == 0:
+                logger.info("No events for chart/map generation")
+                return
+
+            # Initialize charts dict if not exists
+            if "charts" not in spatial_analysis:
+                spatial_analysis["charts"] = {}
+
+            # Generate time series chart
+            try:
+                logger.info(f"Generating time series chart with {len(events)} events")
+                time_series_bytes = self.chart_service.generate_time_series_chart(
+                    events=events,
+                    title="Weather Events Over Time"
+                )
+                time_series_b64 = base64.b64encode(time_series_bytes).decode('utf-8')
+                spatial_analysis["charts"]["time_series"] = f"data:image/png;base64,{time_series_b64}"
+                logger.info("Time series chart generated successfully")
+            except Exception as e:
+                logger.warning(f"Failed to generate time series chart: {e}")
+
+            # Generate event distribution chart
+            try:
+                logger.info("Generating event distribution chart")
+                distribution_bytes = self.chart_service.generate_event_distribution_chart(
+                    events=events,
+                    title="Weather Event Distribution"
+                )
+                distribution_b64 = base64.b64encode(distribution_bytes).decode('utf-8')
+                spatial_analysis["charts"]["distribution"] = f"data:image/png;base64,{distribution_b64}"
+                logger.info("Distribution chart generated successfully")
+            except Exception as e:
+                logger.warning(f"Failed to generate distribution chart: {e}")
+
+            # Generate monthly breakdown chart
+            try:
+                logger.info("Generating monthly breakdown chart")
+                monthly_bytes = self.chart_service.generate_monthly_breakdown_chart(
+                    events=events,
+                    title="Monthly Event Breakdown"
+                )
+                monthly_b64 = base64.b64encode(monthly_bytes).decode('utf-8')
+                spatial_analysis["charts"]["monthly_breakdown"] = f"data:image/png;base64,{monthly_b64}"
+                logger.info("Monthly breakdown chart generated successfully")
+            except Exception as e:
+                logger.warning(f"Failed to generate monthly breakdown chart: {e}")
+
+            # Generate heat map (if Chrome/ChromeDriver available)
+            try:
+                # Get center coordinates from boundary or first event
+                center_lat = spatial_analysis.get("center_latitude")
+                center_lon = spatial_analysis.get("center_longitude")
+
+                if not center_lat or not center_lon:
+                    # Try to get from first event
+                    if events:
+                        center_lat = events[0].get("latitude", events[0].get("begin_lat"))
+                        center_lon = events[0].get("longitude", events[0].get("begin_lon"))
+
+                if center_lat and center_lon:
+                    logger.info(f"Generating heat map centered at {center_lat}, {center_lon}")
+                    heat_map_bytes = self.map_service.generate_heat_map(
+                        events=events,
+                        center_lat=center_lat,
+                        center_lon=center_lon,
+                        title="Weather Event Heat Map"
+                    )
+                    heat_map_b64 = base64.b64encode(heat_map_bytes).decode('utf-8')
+                    spatial_analysis["charts"]["heat_map"] = f"data:image/png;base64,{heat_map_b64}"
+                    logger.info("Heat map generated successfully")
+                else:
+                    logger.warning("No center coordinates available for heat map")
+
+            except Exception as e:
+                logger.warning(f"Failed to generate heat map (Chrome may not be available): {e}")
+
+            logger.info(f"Added {len(spatial_analysis.get('charts', {}))} visualizations to spatial analysis")
+
+        except Exception as e:
+            logger.error(f"Error adding charts and maps to spatial data: {e}")
+            # Don't fail the whole report if chart generation fails
+
     def get_report_status(self, report_id: str) -> Optional[Dict[str, Any]]:
         """Get the current status of a report"""
         return self.report_status.get(report_id)

@@ -1,55 +1,90 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Multi-stage build for smaller image size
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libffi-dev \
     libssl-dev \
-    libxml2-dev \
-    libxslt1-dev \
-    zlib1g-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libgobject-2.0-0 \
-    libgdk-pixbuf-2.0-0 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libpangoft2-1.0-0 \
-    libffi-dev \
-    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final stage
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install runtime dependencies including Chrome for Selenium
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2 \
+    libxslt1.1 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libgobject-2.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libpangoft2-1.0-0 \
+    shared-mime-info \
+    curl \
+    wget \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Chrome for Selenium map rendering
+RUN wget -q -O /tmp/google-chrome-key.pub https://dl-ssl.google.com/linux/linux_signing_key.pub \
+    && gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg /tmp/google-chrome-key.pub \
+    && rm /tmp/google-chrome-key.pub \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder to /usr/local for system-wide access
+COPY --from=builder /root/.local /usr/local
 
 # Copy application code
 COPY app/ ./app/
 COPY templates/ ./templates/
-COPY static/ ./static/
 COPY start.sh ./
+
+# Copy static directory if it exists (may be empty, used for future assets)
+COPY static ./static/
+
+# Make start script executable
+RUN chmod +x ./start.sh
 
 # Create temp directory for report generation
 RUN mkdir -p /tmp/reports
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app
-RUN chown -R app:app /app /tmp/reports
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash --uid 1000 app && \
+    chown -R app:app /app /tmp/reports
+
+# Switch to non-root user
 USER app
 
-# Expose port
+# Expose port (Heroku will override with $PORT)
 EXPOSE 8000
+
+# Add labels for metadata
+LABEL maintainer="ApexOS <apexos@herokumanager.com>"
+LABEL description="Weather Reports Microservice - Standalone FastAPI service for generating weather and spatial reports"
+LABEL version="1.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Run the application
 CMD ["./start.sh"]

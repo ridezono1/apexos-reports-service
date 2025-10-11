@@ -29,49 +29,48 @@ A scalable FastAPI microservice for generating professional reports. Currently s
 - **Risk Assessment**: Risk zone mapping and analysis
 - **Boundary Visualization**: Administrative boundary analysis
 
-## Git Submodule Information
+## Deployment
 
-This reports service is part of the ApexOS monorepo and can be managed as a git submodule.
+This reports service is part of the ApexOS monorepo (converted from git submodule to regular directory on Oct 9, 2025) and deployed as a standalone microservice.
 
-### Working with the Submodule
+### Automated Deployment (CI/CD) - Recommended
 
+The service uses **container-based deployment** via GitHub Actions:
+
+- **Triggers**: Automatically deploys when changes are pushed to `reports-service/**` files on the `main` branch
+- **Method**: Docker container built and pushed to Heroku Container Registry
+- **Stack**: `container` (platform-independent)
+- **URL**: https://apexos-reports-service-ce3abe785e88.herokuapp.com
+
+The GitHub Actions workflow (`.github/workflows/deploy-reports-service.yml`) handles:
+1. Docker image build with multi-stage optimization
+2. Push to Heroku Container Registry
+3. Container release
+4. Health check verification with retry logic
+
+### Manual Deployment Options
+
+**Option 1: Container-based (recommended for consistency with CI/CD)**
 ```bash
-# Clone the main repository with submodules
-git clone --recursive git@github.com:Apex-Roofer-Technologies/apexos.git
-
-# Or if already cloned, initialize submodules
-git submodule update --init --recursive
-
-# Update submodules to latest
-git submodule update --remote
-
-# Work in the reports-service directory
+# From the main ApexOS repository root
 cd reports-service
 
-# Make changes and commit
-git add .
-git commit -m "Your changes"
-
-# Push to the submodule repository
-git push origin main
-
-# Go back to main repo and update submodule reference
-cd ..
-git add reports-service
-git commit -m "Update reports-service submodule"
-git push origin main
+# Deploy via Heroku CLI (container stack)
+heroku container:push web --app apexos-reports-service
+heroku container:release web --app apexos-reports-service
 ```
 
-### Deployment
+**Option 2: Trigger GitHub Actions workflow manually**
+```bash
+gh workflow run deploy-reports-service.yml
+```
 
-For Heroku deployment, use the deployment script from the main repository:
-
+**Option 3: Legacy deployment script (uses git push, not recommended)**
 ```bash
 # From the main ApexOS repository root
 ./deploy-reports-service.sh
 ```
-
-This script creates a clean deployment with only the reports-service files, avoiding Django conflicts.
+Note: This script creates a temporary git repo and pushes directly. Since the stack is now `container`, it's better to use container-based deployment methods above.
 
 ## Quick Start
 

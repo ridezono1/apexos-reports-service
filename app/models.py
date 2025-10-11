@@ -5,6 +5,7 @@ Pydantic models for request/response validation
 from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from enum import Enum
 
 class ReportFormat(str, Enum):
@@ -100,6 +101,7 @@ class AnalysisPeriod(str, Enum):
     """Analysis period options for reports."""
     SIX_MONTHS = "6_months"
     NINE_MONTHS = "9_months"
+    TWENTY_FOUR_MONTHS = "24_months"
 
 class DateRange(BaseModel):
     """Date range for weather reports - automatically calculated from current date."""
@@ -118,16 +120,19 @@ class DateRange(BaseModel):
     def create_for_period(cls, analysis_period: 'AnalysisPeriod') -> 'DateRange':
         """Create a date range for the specified period ending today."""
         today = date.today()
-        
+
         if analysis_period == AnalysisPeriod.SIX_MONTHS:
-            # Calculate 6 months ago
-            start_date = today.replace(month=today.month - 6) if today.month > 6 else today.replace(year=today.year - 1, month=today.month + 6)
+            # Calculate 6 months ago using relativedelta (handles month boundaries)
+            start_date = today - relativedelta(months=6)
         elif analysis_period == AnalysisPeriod.NINE_MONTHS:
-            # Calculate 9 months ago
-            start_date = today.replace(month=today.month - 9) if today.month > 9 else today.replace(year=today.year - 1, month=today.month + 3)
+            # Calculate 9 months ago using relativedelta
+            start_date = today - relativedelta(months=9)
+        elif analysis_period == AnalysisPeriod.TWENTY_FOUR_MONTHS:
+            # Calculate 24 months (2 years) ago using relativedelta
+            start_date = today - relativedelta(months=24)
         else:
             raise ValueError(f"Unsupported analysis period: {analysis_period}")
-        
+
         return cls(start=start_date, end=today)
 
 class ReportLocation(BaseModel):

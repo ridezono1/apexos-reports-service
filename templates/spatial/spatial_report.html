@@ -463,6 +463,53 @@
         </div>
     </div>
 
+    <!-- Weather Analysis Charts -->
+    {% if charts %}
+    <div class="page-break"></div>
+
+    <h2 class="section-title">Weather Event Analysis</h2>
+
+    {% if charts.time_series %}
+    <div style="margin: 30px 0; page-break-inside: avoid;">
+        <h3 style="color: #8e44ad; font-size: 14pt; font-weight: 500; margin-bottom: 15px;">Events Over Time</h3>
+        <div style="background: white; border: 2px solid #ecf0f1; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+            <img src="{{ charts.time_series }}" alt="Time Series Chart" style="width: 100%; height: auto; display: block;">
+        </div>
+        <p style="color: #7f8c8d; font-size: 10pt; margin-top: 10px; text-align: center;">Historical trend of weather events within the analysis period</p>
+    </div>
+    {% endif %}
+
+    {% if charts.distribution %}
+    <div style="margin: 30px 0; page-break-inside: avoid;">
+        <h3 style="color: #8e44ad; font-size: 14pt; font-weight: 500; margin-bottom: 15px;">Event Type Distribution</h3>
+        <div style="background: white; border: 2px solid #ecf0f1; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+            <img src="{{ charts.distribution }}" alt="Distribution Chart" style="width: 100%; height: auto; display: block;">
+        </div>
+        <p style="color: #7f8c8d; font-size: 10pt; margin-top: 10px; text-align: center;">Breakdown of weather event types by frequency</p>
+    </div>
+    {% endif %}
+
+    {% if charts.monthly_breakdown %}
+    <div style="margin: 30px 0; page-break-inside: avoid;">
+        <h3 style="color: #8e44ad; font-size: 14pt; font-weight: 500; margin-bottom: 15px;">Monthly Breakdown</h3>
+        <div style="background: white; border: 2px solid #ecf0f1; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+            <img src="{{ charts.monthly_breakdown }}" alt="Monthly Breakdown" style="width: 100%; height: auto; display: block;">
+        </div>
+        <p style="color: #7f8c8d; font-size: 10pt; margin-top: 10px; text-align: center;">Weather events distributed across months and event types</p>
+    </div>
+    {% endif %}
+
+    {% if charts.heat_map %}
+    <div style="margin: 30px 0; page-break-inside: avoid;">
+        <h3 style="color: #8e44ad; font-size: 14pt; font-weight: 500; margin-bottom: 15px;">Geographic Heat Map</h3>
+        <div style="background: white; border: 2px solid #ecf0f1; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+            <img src="{{ charts.heat_map }}" alt="Heat Map" style="width: 100%; height: auto; display: block;">
+        </div>
+        <p style="color: #7f8c8d; font-size: 10pt; margin-top: 10px; text-align: center;">Geographic concentration of weather events - red areas indicate higher event density</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <!-- Weather Summary -->
     <div class="weather-summary">
         <h2 style="margin: 0 0 15px 0; font-size: 16pt; font-weight: 400;">Area Weather Summary</h2>

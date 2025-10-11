@@ -163,9 +163,11 @@ class TemplateEngine:
                 'business_impact': spatial_data.get('business_impact', {}),
                 'lead_opportunities': spatial_data.get('lead_opportunities', {}),
                 'route_optimization': spatial_data.get('route_optimization', {}),
+                'charts': spatial_data.get('charts', {}),  # Add charts for visualizations
                 'satellite_map_base64': satellite_map_base64,
                 'risk_heatmap_base64': risk_heatmap_base64,
                 'event_heatmap_base64': event_heatmap_base64,
+                'boundary_map_base64': boundary_map_base64,
                 'logo_base64': logo_base64,
                 'generated_at': self._get_current_time(),
                 'report_id': options.get('report_id') if options else None,
