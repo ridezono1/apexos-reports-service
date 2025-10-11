@@ -37,10 +37,10 @@ class TemplateEngine:
         weather_data: Dict[str, Any],
         options: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Render weather report template"""
-        
+        """Render address weather report template"""
+
         try:
-            template_path = f"weather/{template_name}.html"
+            template_path = f"address/{template_name}.html"
             template = self.env.get_template(template_path)
             
             # Prepare template context
@@ -195,7 +195,7 @@ class TemplateEngine:
             from pathlib import Path
 
             # Use address_report template
-            template_path = "weather/address_report.html"
+            template_path = "address/address_report.html"
             template = self.env.get_template(template_path)
 
             # Extract coordinates

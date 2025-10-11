@@ -136,10 +136,13 @@ class SpatialAnalysisService:
         try:
             async with httpx.AsyncClient() as client:
                 # Search for county boundary
-                search_query = f"{county_name} county"
+                # Don't add "county" if it's already in the name
+                search_query = county_name if "county" in county_name.lower() else f"{county_name} county"
                 if state_code:
                     search_query += f", {state_code}"
-                
+
+                logger.info(f"Searching OSM for county: {search_query}")
+
                 url = "https://nominatim.openstreetmap.org/search"
                 params = {
                     "q": search_query,
@@ -147,23 +150,34 @@ class SpatialAnalysisService:
                     "polygon_geojson": "1",
                     "limit": 1
                 }
-                
+
                 response = await client.get(url, params=params, headers={"User-Agent": "WeatherReportsService/1.0 (contact@example.com)"}, timeout=10.0)
                 response.raise_for_status()
-                
+
                 data = response.json()
+                logger.info(f"OSM response: {len(data)} results found")
+
                 if data and len(data) > 0:
                     # Extract boundary coordinates from GeoJSON
                     geometry = data[0].get("geojson", {})
+                    logger.info(f"Geometry type: {geometry.get('type')}")
+
                     if geometry.get("type") == "Polygon":
                         coordinates = geometry["coordinates"][0]  # First ring
+                        logger.info(f"Found polygon with {len(coordinates)} coordinates")
                         return [(coord[1], coord[0]) for coord in coordinates]  # Convert to (lat, lon)
-                
+                    elif geometry.get("type") == "MultiPolygon":
+                        # Use the first polygon from MultiPolygon
+                        coordinates = geometry["coordinates"][0][0]
+                        logger.info(f"Found multipolygon, using first polygon with {len(coordinates)} coordinates")
+                        return [(coord[1], coord[0]) for coord in coordinates]
+
                 # Fallback: create approximate boundary using bounding box
                 bbox = data[0].get("boundingbox", [])
+                logger.info(f"Using bounding box fallback: {bbox}")
                 if len(bbox) >= 4:
                     return self._create_bbox_polygon(bbox)
-                
+
                 raise Exception(f"Could not find boundary for county: {county_name}")
                 
         except Exception as e:
