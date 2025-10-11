@@ -167,7 +167,6 @@ class TemplateEngine:
                 'satellite_map_base64': satellite_map_base64,
                 'risk_heatmap_base64': risk_heatmap_base64,
                 'event_heatmap_base64': event_heatmap_base64,
-                'boundary_map_base64': boundary_map_base64,
                 'logo_base64': logo_base64,
                 'generated_at': self._get_current_time(),
                 'report_id': options.get('report_id') if options else None,

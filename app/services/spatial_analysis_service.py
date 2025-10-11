@@ -72,6 +72,12 @@ class SpatialAnalysisService:
                 analysis_results, boundary_data, analysis_options
             )
             
+            # Calculate center point of boundary for maps
+            lats = [coord[0] for coord in boundary_coords]
+            lons = [coord[1] for coord in boundary_coords]
+            center_lat = sum(lats) / len(lats) if lats else 0
+            center_lon = sum(lons) / len(lons) if lons else 0
+            
             return {
                 "boundary_info": {
                     "type": boundary_type,
@@ -79,6 +85,8 @@ class SpatialAnalysisService:
                     "area_sq_km": self._calculate_area(boundary_coords),
                     "grid_points": len(grid_points)
                 },
+                "center_latitude": center_lat,
+                "center_longitude": center_lon,
                 "analysis_period": analysis_period,
                 "weather_summary": analysis_results["summary"],
                 "risk_assessment": analysis_results["risk_assessment"],
@@ -310,13 +318,13 @@ class SpatialAnalysisService:
         
         # Determine grid density based on boundary type
         if boundary_type in ["county"]:
-            grid_spacing = 0.05  # ~5km spacing
+            grid_spacing = 0.025  # ~2.5km spacing (denser for better coverage)
         elif boundary_type in ["city"]:
-            grid_spacing = 0.02  # ~2km spacing
+            grid_spacing = 0.01  # ~1km spacing (increased from 0.02)
         elif boundary_type in ["neighborhood"]:
-            grid_spacing = 0.01  # ~1km spacing
+            grid_spacing = 0.005  # ~0.5km spacing
         else:
-            grid_spacing = 0.03  # ~3km spacing
+            grid_spacing = 0.015  # ~1.5km spacing
         
         # Generate grid points
         grid_points = []
@@ -565,7 +573,8 @@ class SpatialAnalysisService:
             "total_events": len(all_events),
             "events_by_type": event_types,
             "events_by_severity": event_severities,
-            "unique_events": list(set(event.get("event", "") for event in all_events))
+            "unique_events": list(set(event.get("event", "") for event in all_events)),
+            "raw_events": all_events  # Add raw events list for chart generation
         }
     
     async def _assess_business_impact(

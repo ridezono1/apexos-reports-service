@@ -84,8 +84,14 @@ async def generate_spatial_report(request: SpatialWeatherReportCreate):
             else:
                 raise ValueError(f"Unsupported geometry type: {request.boundary_geometry.get('type')}")
         else:
-            # Fallback to county lookup
-            boundary_type = "county"
+            # Detect boundary type from name
+            # If contains "County" -> county, otherwise assume city for finer grid
+            boundary_id_lower = request.boundary_id.lower()
+            if "county" in boundary_id_lower:
+                boundary_type = "county"
+            else:
+                # Default to city for finer grid spacing (0.02° vs 0.05°)
+                boundary_type = "city"
             boundary_data = {"name": request.boundary_id}
 
         report_id = await report_generator.generate_spatial_report(

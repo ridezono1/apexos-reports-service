@@ -159,7 +159,7 @@ class ReportGenerator:
         boundary_type: str,
         boundary_data: Dict[str, Any],
         analysis_period: str,
-        template: str = "professional",
+        template: str = "spatial_report",
         format: ReportFormat = ReportFormat.PDF,
         options: Optional[Dict[str, Any]] = None
     ) -> str:
@@ -455,8 +455,9 @@ class ReportGenerator:
         import base64
 
         try:
-            # Extract events from spatial analysis
-            events = spatial_analysis.get("weather_events", [])
+            # Extract raw events from spatial analysis for chart generation
+            weather_events_summary = spatial_analysis.get("weather_events", {})
+            events = weather_events_summary.get("raw_events", []) if isinstance(weather_events_summary, dict) else []
 
             if not events or len(events) == 0:
                 logger.info("No events for chart/map generation")

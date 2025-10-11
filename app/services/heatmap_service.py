@@ -60,9 +60,10 @@ class HeatmapService:
                 draw.polygon(boundary_pixels, outline=(150, 150, 150), width=2)
 
             # Draw risk areas with graduated colors
-            high_risk = risk_areas.get('areas', []) if isinstance(risk_areas.get('high_risk_areas'), dict) else []
-            medium_risk = risk_areas.get('areas', []) if isinstance(risk_areas.get('medium_risk_areas'), dict) else []
-            low_risk = risk_areas.get('areas', []) if isinstance(risk_areas.get('low_risk_areas'), dict) else []
+            # Extract areas from properly nested risk assessment structure
+            high_risk = risk_areas.get('high_risk_areas', {}).get('areas', []) if isinstance(risk_areas.get('high_risk_areas'), dict) else []
+            medium_risk = risk_areas.get('medium_risk_areas', {}).get('areas', []) if isinstance(risk_areas.get('medium_risk_areas'), dict) else []
+            low_risk = risk_areas.get('low_risk_areas', {}).get('areas', []) if isinstance(risk_areas.get('low_risk_areas'), dict) else []
 
             # Draw low risk areas (green)
             for area in low_risk:
