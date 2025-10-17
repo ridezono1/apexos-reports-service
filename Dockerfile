@@ -41,14 +41,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome for Selenium map rendering
-RUN wget -q -O /tmp/google-chrome-key.pub https://dl-ssl.google.com/linux/linux_signing_key.pub \
-    && gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg /tmp/google-chrome-key.pub \
-    && rm /tmp/google-chrome-key.pub \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
+# Install Chrome for Selenium map rendering (supports both AMD64 and ARM64)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        wget -q -O /tmp/google-chrome-key.pub https://dl-ssl.google.com/linux/linux_signing_key.pub && \
+        gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg /tmp/google-chrome-key.pub && \
+        rm /tmp/google-chrome-key.pub && \
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends google-chrome-stable; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        # For ARM64, use Chromium instead of Chrome (Chrome doesn't have ARM64 packages)
+        apt-get update && \
+        apt-get install -y --no-install-recommends chromium chromium-driver; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder to /usr/local for system-wide access
 COPY --from=builder /root/.local /usr/local

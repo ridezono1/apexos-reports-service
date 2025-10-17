@@ -431,13 +431,25 @@
 
     {% if charts.heat_map %}
     <div style="margin: 30px 0; page-break-before: always;">
-        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">Geographic Heat Map</h3>
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">📍 Geographic Heat Map</h3>
         <div style="text-align: center;">
-            <img src="{{ charts.heat_map }}" alt="Heat Map" style="max-width: 100%; height: auto;">
+            <img src="{{ charts.heat_map }}" alt="Heat Map" style="max-width: 100%; height: auto; border: 2px solid #e2e8f0; border-radius: 8px;">
         </div>
         <p style="color: #666; font-size: 10pt; text-align: center; margin-top: 10px;">
             Red areas indicate higher concentration of weather events
         </p>
+    </div>
+    {% else %}
+    <div style="margin: 30px 0; page-break-before: always;">
+        <h3 style="color: #6B46C1; font-size: 14pt; margin-bottom: 15px;">📍 Geographic Heat Map</h3>
+        <div style="text-align: center; padding: 60px 20px; background: #f8f9fa; border: 2px dashed #cbd5e0; border-radius: 8px;">
+            <p style="color: #718096; font-size: 12pt; margin: 0;">
+                ⚠️ Geographic heat map could not be generated
+            </p>
+            <p style="color: #a0aec0; font-size: 10pt; margin: 10px 0 0 0;">
+                This feature requires additional system dependencies. Please contact support if you need this visualization.
+            </p>
+        </div>
     </div>
     {% endif %}
     {% endif %}

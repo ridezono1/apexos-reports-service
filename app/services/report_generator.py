@@ -519,7 +519,7 @@ class ReportGenerator:
                         center_lon = events[0].get("longitude", events[0].get("begin_lon"))
 
                 if center_lat and center_lon:
-                    logger.info(f"Generating heat map centered at {center_lat}, {center_lon}")
+                    logger.info(f"Generating heat map centered at {center_lat}, {center_lon} with {len(events)} events")
                     heat_map_bytes = self.map_service.generate_heat_map(
                         events=events,
                         center_lat=center_lat,
@@ -528,12 +528,18 @@ class ReportGenerator:
                     )
                     heat_map_b64 = base64.b64encode(heat_map_bytes).decode('utf-8')
                     spatial_analysis["charts"]["heat_map"] = f"data:image/png;base64,{heat_map_b64}"
-                    logger.info("Heat map generated successfully")
+                    logger.info(f"✓ Heat map generated successfully ({len(heat_map_bytes)} bytes)")
                 else:
-                    logger.warning("No center coordinates available for heat map")
+                    logger.error("❌ No center coordinates available for heat map generation")
+                    logger.error(f"   center_lat={center_lat}, center_lon={center_lon}")
+                    logger.error(f"   events count={len(events)}")
 
             except Exception as e:
-                logger.warning(f"Failed to generate heat map (Chrome may not be available): {e}")
+                logger.error(f"❌ Failed to generate heat map: {e}", exc_info=True)
+                logger.error("   This usually means Chrome/ChromeDriver is not available or failed to initialize")
+                logger.error("   The report will be generated without the geographic heat map")
+                # Don't set the heat_map key at all if generation fails
+                # This way the template will know it's not available
 
             logger.info(f"Added {len(spatial_analysis.get('charts', {}))} visualizations to spatial analysis")
 

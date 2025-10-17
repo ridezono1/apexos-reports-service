@@ -385,6 +385,8 @@ class PDFGenerationService:
 
     def _build_heat_map_section(self, spatial_data: Dict[str, Any]) -> List:
         """Build heat map section with actual Folium-generated heat map."""
+        import base64
+        
         elements = []
 
         # Section heading
@@ -404,39 +406,80 @@ class PDFGenerationService:
         elements.append(description)
         elements.append(Spacer(1, 0.2 * inch))
 
-        # Generate heat map if we have heat map data
-        heat_map_data = spatial_data.get("heat_map_data", [])
-        if heat_map_data and len(heat_map_data) > 0:
+        # First, check if we have a pre-generated heat map in charts
+        charts = spatial_data.get("charts", {})
+        heat_map_b64_data = charts.get("heat_map")
+        
+        if heat_map_b64_data:
             try:
-                # Extract center coordinates from first event or use provided center
-                center_lat = spatial_data.get("center_lat", heat_map_data[0].get("latitude", 0))
-                center_lon = spatial_data.get("center_lon", heat_map_data[0].get("longitude", 0))
-
-                # Generate heat map
-                heat_map_bytes = self.map_service.generate_heat_map(
-                    events=heat_map_data,
-                    center_lat=center_lat,
-                    center_lon=center_lon,
-                    title="Weather Event Heat Map"
-                )
-
+                # Extract base64 data from data URI (format: "data:image/png;base64,...")
+                if heat_map_b64_data.startswith("data:image/png;base64,"):
+                    heat_map_b64 = heat_map_b64_data.split(",", 1)[1]
+                else:
+                    heat_map_b64 = heat_map_b64_data
+                
+                # Decode base64 to bytes
+                heat_map_bytes = base64.b64decode(heat_map_b64)
+                
                 # Add to PDF
                 heat_map_img = RLImage(io.BytesIO(heat_map_bytes), width=6*inch, height=4*inch)
                 elements.append(heat_map_img)
+                logger.info("Successfully added pre-generated heat map to PDF")
 
             except Exception as e:
-                logger.error(f"Error generating heat map: {str(e)}")
+                logger.error(f"Error adding pre-generated heat map to PDF: {str(e)}")
                 placeholder = Paragraph(
-                    f"[Heat map could not be generated: {str(e)}]",
+                    f"[Heat map could not be added: {str(e)}]",
                     self.styles["CustomBody"],
                 )
                 elements.append(placeholder)
         else:
-            placeholder = Paragraph(
-                "[No heat map data available]",
-                self.styles["CustomBody"],
-            )
-            elements.append(placeholder)
+            # Fallback: Try to generate heat map from raw event data
+            events = spatial_data.get("events", [])
+            if events and len(events) > 0:
+                try:
+                    # Extract center coordinates
+                    center_lat = spatial_data.get("center_latitude")
+                    center_lon = spatial_data.get("center_longitude")
+                    
+                    if not center_lat or not center_lon:
+                        # Try to get from first event
+                        center_lat = events[0].get("latitude", events[0].get("begin_lat"))
+                        center_lon = events[0].get("longitude", events[0].get("begin_lon"))
+
+                    if center_lat and center_lon:
+                        logger.info(f"Generating heat map from events (fallback)")
+                        # Generate heat map
+                        heat_map_bytes = self.map_service.generate_heat_map(
+                            events=events,
+                            center_lat=center_lat,
+                            center_lon=center_lon,
+                            title="Weather Event Heat Map"
+                        )
+
+                        # Add to PDF
+                        heat_map_img = RLImage(io.BytesIO(heat_map_bytes), width=6*inch, height=4*inch)
+                        elements.append(heat_map_img)
+                    else:
+                        placeholder = Paragraph(
+                            "[No center coordinates available for heat map]",
+                            self.styles["CustomBody"],
+                        )
+                        elements.append(placeholder)
+
+                except Exception as e:
+                    logger.error(f"Error generating heat map from events: {str(e)}")
+                    placeholder = Paragraph(
+                        f"[Heat map could not be generated: {str(e)}]",
+                        self.styles["CustomBody"],
+                    )
+                    elements.append(placeholder)
+            else:
+                placeholder = Paragraph(
+                    "[No heat map data available]",
+                    self.styles["CustomBody"],
+                )
+                elements.append(placeholder)
 
         return elements
 
