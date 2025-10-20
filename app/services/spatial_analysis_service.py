@@ -370,22 +370,30 @@ class SpatialAnalysisService:
         try:
             start_date = datetime.fromisoformat(analysis_period["start"])
             end_date = datetime.fromisoformat(analysis_period["end"])
-            
+
+            # IMPORTANT: Always fetch 24 months of severe weather events for spatial reports
+            # This provides comprehensive storm history regardless of selected analysis period
+            severe_weather_start = end_date - timedelta(days=730)  # 24 months = ~730 days
+
+            logger.info(f"Fetching weather data for spatial report:")
+            logger.info(f"  - Analysis period: {start_date.date()} to {end_date.date()}")
+            logger.info(f"  - Severe weather events period: {severe_weather_start.date()} to {end_date.date()} (24 months)")
+
             # Fetch weather data for each grid point
             weather_data = []
             for lat, lon in grid_points:
                 try:
                     # Get current weather
                     current = await self.weather_service.get_current_weather(lat, lon)
-                    
-                    # Get historical weather
+
+                    # Get historical weather (uses selected analysis period)
                     historical = await self.weather_service.get_historical_weather(
                         lat, lon, start_date.date(), end_date.date()
                     )
-                    
-                    # Get weather events
+
+                    # Get weather events (ALWAYS 24 months for comprehensive severe weather history)
                     events = await self.weather_service.get_weather_events(
-                        lat, lon, start_date.date(), end_date.date()
+                        lat, lon, severe_weather_start.date(), end_date.date(), radius_km=50.0
                     )
                     
                     weather_data.append({

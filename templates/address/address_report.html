@@ -522,7 +522,10 @@
 
     <!-- Severe Weather History Table -->
     <div class="severe-weather-section">
-        <h2 class="section-title">Severe Weather History</h2>
+        <h2 class="section-title">Severe Weather History (Last 24 Months)</h2>
+        <p style="font-size: 10pt; color: #7f8c8d; margin: -10px 0 15px 0;">
+            Includes tornadoes, hurricanes, tropical storms, hail (≥1"), damaging winds (≥60 mph), floods, winter storms, and fire weather events
+        </p>
         {% if weather_summary.severe_weather_events and weather_summary.severe_weather_events|length > 0 %}
         <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
             <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
@@ -531,9 +534,9 @@
                         <th style="padding: 12px; text-align: left; font-weight: 500;">Date</th>
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Event Type</th>
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Duration</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Meteorologist</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Severity</th>
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Magnitude</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Algorithm Magnitude</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Classification</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -552,7 +555,8 @@
         </div>
         {% else %}
         <div style="background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 30px;">
-            <p style="color: #7f8c8d; font-size: 12pt; margin: 0;">No severe weather events recorded during the {{ analysis_period.start }} to {{ analysis_period.end }} period.</p>
+            <p style="color: #27ae60; font-size: 12pt; margin: 0; font-weight: 600;">✓ No Severe Weather Events</p>
+            <p style="color: #7f8c8d; font-size: 10pt; margin: 5px 0 0 0;">No tornadoes, hurricanes, damaging hail, or severe wind events recorded in the past 24 months.</p>
         </div>
         {% endif %}
     </div>

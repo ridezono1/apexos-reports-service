@@ -52,25 +52,55 @@ class TomorrowIOService:
             timesteps = ['1h', '1d']
         
         try:
-            # Core weather data layers
+            # Core weather data layers - comprehensive fields for address reports
             fields = [
+                # Temperature
                 'temperature',
                 'temperatureApparent',
+                'dewPoint',
+
+                # Humidity
                 'humidity',
+
+                # Precipitation - comprehensive coverage
                 'precipitationIntensity',
                 'precipitationProbability',
                 'precipitationType',
+                'rainIntensity',
+                'rainAccumulation',
+                'snowIntensity',
+                'snowAccumulation',
+                'freezingRainIntensity',
+                'iceAccumulation',
+                'sleetIntensity',
+
+                # Wind - critical for damage assessment
                 'windSpeed',
                 'windGust',
                 'windDirection',
+
+                # Severe weather indicators
                 'weatherCode',
                 'weatherCodeFull',
+                'thunderstormProbability',
+
+                # Visibility & Pressure
                 'visibility',
                 'pressureSurfaceLevel',
+
+                # Cloud data
                 'cloudCover',
+                'cloudBase',
+                'cloudCeiling',
+
+                # UV & Environmental
                 'uvIndex',
+
+                # Hail - critical for roofing
                 'hailBinary',
                 'hailProbability',
+
+                # Fire risk
                 'fireIndex'
             ]
             
@@ -130,24 +160,52 @@ class TomorrowIOService:
             Historical weather data
         """
         try:
-            # Historical API fields
+            # Historical API fields - comprehensive data for trend analysis
             fields = [
+                # Temperature
                 'temperature',
                 'temperatureApparent',
+                'dewPoint',
+
+                # Humidity
                 'humidity',
+
+                # Precipitation - comprehensive historical data
                 'precipitationIntensity',
                 'precipitationProbability',
                 'precipitationType',
+                'rainIntensity',
+                'rainAccumulation',
+                'snowIntensity',
+                'snowAccumulation',
+                'freezingRainIntensity',
+                'iceAccumulation',
+                'sleetIntensity',
+
+                # Wind - historical wind patterns
                 'windSpeed',
                 'windGust',
                 'windDirection',
+
+                # Weather conditions
                 'weatherCode',
+                'thunderstormProbability',
+
+                # Visibility & Pressure
                 'visibility',
                 'pressureSurfaceLevel',
+
+                # Cloud data
                 'cloudCover',
+
+                # UV
                 'uvIndex',
+
+                # Hail - historical hail events
                 'hailBinary',
                 'hailProbability',
+
+                # Fire risk
                 'fireIndex'
             ]
             
@@ -216,13 +274,14 @@ class TomorrowIOService:
                 "endTime": end_date.isoformat() + "T23:59:59Z",
                 "radius": f"{radius_km}km",
                 "eventTypes": [
-                    "hail",
-                    "wind",
-                    "tornado",
-                    "fire",
-                    "flood",
-                    "winter",
-                    "thunderstorm"
+                    "hail",              # Hail events
+                    "wind",              # High wind events
+                    "tornado",           # Tornado events
+                    "tropical",          # Hurricane & tropical storm events
+                    "fire",              # Fire weather events
+                    "flood",             # Flooding events
+                    "winter",            # Winter storm events
+                    "thunderstorm"       # Thunderstorm events
                 ]
             }
             

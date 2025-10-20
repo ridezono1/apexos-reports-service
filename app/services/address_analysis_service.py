@@ -132,15 +132,25 @@ class AddressAnalysisService:
         try:
             start_date = datetime.fromisoformat(analysis_period["start"])
             end_date = datetime.fromisoformat(analysis_period["end"])
-            
+
+            # IMPORTANT: Always fetch 24 months of severe weather events for address reports
+            # This provides comprehensive storm history regardless of selected analysis period
+            severe_weather_start = end_date - timedelta(days=730)  # 24 months = ~730 days
+
+            logger.info(f"Fetching weather data for address report:")
+            logger.info(f"  - Analysis period: {start_date.date()} to {end_date.date()}")
+            logger.info(f"  - Severe weather events period: {severe_weather_start.date()} to {end_date.date()} (24 months)")
+
             # Fetch all weather data types
             current_weather = await self.weather_service.get_current_weather(latitude, longitude)
             forecast = await self.weather_service.get_weather_forecast(latitude, longitude, days=7)
             historical_weather = await self.weather_service.get_historical_weather(
                 latitude, longitude, start_date.date(), end_date.date()
             )
+
+            # Always fetch 24 months of severe weather events (tornadoes, hurricanes, hail, strong winds, etc.)
             weather_events = await self.weather_service.get_weather_events(
-                latitude, longitude, start_date.date(), end_date.date()
+                latitude, longitude, severe_weather_start.date(), end_date.date(), radius_km=50.0
             )
             
             # Calculate property-specific weather summary
@@ -369,6 +379,71 @@ class AddressAnalysisService:
                 else:  # EF0-EF1: Weak
                     algorithm_magnitude = f"Weak ({ef_rating})"
                     severity = "Moderate"
+
+            # TROPICAL STORMS & HURRICANES: All included (Category 1-5)
+            elif "tropical" in event_type or "hurricane" in event_type or "cyclone" in event_type:
+                is_actionable = True
+                # Category based on wind speed or explicit category
+                if "category" in magnitude_type.lower():
+                    algorithm_magnitude = magnitude_type
+                    severity = "Severe" if mag_value >= 3 else "Moderate"  # Cat 3+ = Major Hurricane
+                else:
+                    # Estimate category from wind speed
+                    if mag_value >= 157:  # Cat 5: ≥157 mph
+                        algorithm_magnitude = "Category 5"
+                        severity = "Severe"
+                    elif mag_value >= 130:  # Cat 4: 130-156 mph
+                        algorithm_magnitude = "Category 4"
+                        severity = "Severe"
+                    elif mag_value >= 111:  # Cat 3: 111-129 mph
+                        algorithm_magnitude = "Category 3"
+                        severity = "Severe"
+                    elif mag_value >= 96:  # Cat 2: 96-110 mph
+                        algorithm_magnitude = "Category 2"
+                        severity = "Moderate"
+                    elif mag_value >= 74:  # Cat 1: 74-95 mph
+                        algorithm_magnitude = "Category 1"
+                        severity = "Moderate"
+                    else:  # Tropical Storm: 39-73 mph
+                        algorithm_magnitude = "Tropical Storm"
+                        severity = "Moderate"
+
+            # FLOOD EVENTS: All included
+            elif "flood" in event_type:
+                is_actionable = True
+                if "flash" in event_type.lower() or mag_value > 3:  # Flash flood or major flooding
+                    algorithm_magnitude = "Major Flooding"
+                    severity = "Severe"
+                elif mag_value > 1:
+                    algorithm_magnitude = "Moderate Flooding"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Minor Flooding"
+                    severity = "Moderate"
+
+            # WINTER STORM EVENTS: All included
+            elif "winter" in event_type or "blizzard" in event_type or "ice" in event_type:
+                is_actionable = True
+                if "blizzard" in event_type.lower() or mag_value > 12:  # Blizzard or heavy snow
+                    algorithm_magnitude = "Severe Winter Storm"
+                    severity = "Severe"
+                elif mag_value > 6:
+                    algorithm_magnitude = "Moderate Winter Storm"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Winter Storm"
+                    severity = "Moderate"
+
+            # FIRE WEATHER EVENTS: High risk events included
+            elif "fire" in event_type:
+                if mag_value >= 50:  # High fire danger threshold
+                    is_actionable = True
+                    if mag_value >= 75:
+                        algorithm_magnitude = "Extreme Fire Risk"
+                        severity = "Severe"
+                    else:
+                        algorithm_magnitude = "High Fire Risk"
+                        severity = "Moderate"
 
             # Only include events that meet business thresholds
             if is_actionable:
