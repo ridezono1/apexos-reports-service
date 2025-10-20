@@ -229,40 +229,16 @@ async def list_templates():
     
     templates = [
         TemplateInfo(
-            name="professional",
+            name="address_report",
             type="weather",
-            description="Professional weather report with comprehensive analysis and charts",
+            description="Address-specific weather report with comprehensive analysis and charts",
             supported_formats=[ReportFormat.PDF, ReportFormat.EXCEL]
         ),
         TemplateInfo(
-            name="executive",
-            type="weather",
-            description="Executive summary weather report for decision makers",
-            supported_formats=[ReportFormat.PDF]
-        ),
-        TemplateInfo(
-            name="detailed",
-            type="weather",
-            description="Detailed weather report with historical data and trends",
-            supported_formats=[ReportFormat.PDF, ReportFormat.EXCEL]
-        ),
-        TemplateInfo(
-            name="storm_analysis",
-            type="weather",
-            description="Storm-focused analysis with impact assessment",
-            supported_formats=[ReportFormat.PDF]
-        ),
-        TemplateInfo(
-            name="professional",
+            name="spatial_report",
             type="spatial",
-            description="Professional spatial weather report with heat maps and risk zones",
+            description="Spatial weather report with heat maps and risk zones",
             supported_formats=[ReportFormat.PDF, ReportFormat.EXCEL]
-        ),
-        TemplateInfo(
-            name="spatial_analysis",
-            type="spatial",
-            description="Comprehensive spatial analysis with boundary visualization",
-            supported_formats=[ReportFormat.PDF]
         )
     ]
     

@@ -40,7 +40,15 @@ class TemplateEngine:
         """Render address weather report template"""
 
         try:
-            template_path = f"address/{template_name}.html"
+            # Map template names to actual template files
+            template_mapping = {
+                "professional": "address_report",
+                "address_report": "address_report",
+                "default": "address_report"
+            }
+            
+            actual_template = template_mapping.get(template_name, "address_report")
+            template_path = f"address/{actual_template}.html"
             template = self.env.get_template(template_path)
             
             # Prepare template context
@@ -75,8 +83,15 @@ class TemplateEngine:
             import base64
             from pathlib import Path
 
-            # Use professional spatial template (matches address report style)
-            template_path = f"spatial/{template_name}.html"
+            # Map template names to actual template files
+            template_mapping = {
+                "professional": "spatial_report",
+                "spatial_report": "spatial_report",
+                "default": "spatial_report"
+            }
+            
+            actual_template = template_mapping.get(template_name, "spatial_report")
+            template_path = f"spatial/{actual_template}.html"
             template = self.env.get_template(template_path)
 
             # Extract boundary information

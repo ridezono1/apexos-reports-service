@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     # Google Maps API configuration
     google_maps_api_key: Optional[str] = None
 
+    # Tomorrow.io Weather API configuration
+    tomorrow_io_api_key: Optional[str] = None
+    tomorrow_io_base_url: str = "https://api.tomorrow.io/v4"
+    tomorrow_io_timeout: int = 30
+    tomorrow_io_max_retries: int = 3
+
     # API Key Authentication
     api_keys_enabled: bool = True
     api_key_list: Optional[str] = None  # Comma-separated list of valid API keys
@@ -25,7 +31,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 50
 
     # Report generation
-    default_template: str = "professional"
+    default_template: str = "address_report"
     supported_formats: list = ["pdf", "excel"]
 
     @property

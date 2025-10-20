@@ -125,6 +125,7 @@ These thresholds identify weather events that represent business opportunities f
 ## Environment Variables
 
 - `GOOGLE_MAPS_API_KEY` - Google Maps API key for geocoding services
+- `TOMORROW_IO_API_KEY` - Tomorrow.io Weather API key for weather data
 - `ALERT_HAIL_MIN_SIZE_INCHES` - Minimum actionable hail size (default: 1.0)
 - `ALERT_WIND_MIN_SPEED_MPH` - Minimum actionable wind speed (default: 60.0)
 
@@ -133,10 +134,10 @@ These thresholds identify weather events that represent business opportunities f
 This microservice is designed to be stateless and focused solely on report generation. It uses real APIs for data:
 
 - **Google Maps API**: For geocoding and address resolution
-- **NOAA Weather API**: For all weather data - current conditions, forecasts, historical data, and weather events (free, no API key required)
+- **Tomorrow.io Weather API**: For comprehensive weather data including current conditions, forecasts, historical data, severe weather events, hail probability, and fire risk assessment
 - **Local File Storage**: Reports are stored temporarily in `/tmp/reports`
 
-The service fetches real-time data from NOAA's official weather API and generates professional reports. Files are stored locally and can be downloaded directly from the service.
+The service fetches real-time data from Tomorrow.io's professional weather API and generates comprehensive reports with advanced features like probabilistic hail forecasting and fire danger assessment. Files are stored locally and can be downloaded directly from the service.
 
 ## Extensibility
 

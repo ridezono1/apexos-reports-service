@@ -122,11 +122,6 @@ async def health_check():
         "version": "1.0.0"
     }
 
-@app.get("/sentry-debug")
-async def trigger_error():
-    """Test endpoint to verify Sentry integration"""
-    division_by_zero = 1 / 0
-
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",

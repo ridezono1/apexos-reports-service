@@ -48,7 +48,7 @@ class ReportGenerator:
         self,
         location: str,
         analysis_period: str,
-        template: str = "professional",
+        template: str = "address_report",
         format: ReportFormat = ReportFormat.PDF,
         options: Optional[Dict[str, Any]] = None
     ) -> str:
@@ -103,7 +103,7 @@ class ReportGenerator:
         self,
         address: str,
         analysis_period: str,
-        template: str = "professional",
+        template: str = "address_report",
         format: ReportFormat = ReportFormat.PDF,
         options: Optional[Dict[str, Any]] = None
     ) -> str:
@@ -317,8 +317,10 @@ class ReportGenerator:
                 "forecast": forecast,
                 "historical_weather": historical_weather,
                 "weather_events": weather_events,
+                "hail_probability": await self.weather_service.get_hail_probability(latitude, longitude),
+                "fire_risk": await self.weather_service.get_fire_risk_assessment(latitude, longitude),
                 "generated_at": datetime.utcnow().isoformat(),
-                "data_sources": ["NOAA"]
+                "data_sources": ["Tomorrow.io"]
             }
             
             logger.info(f"Fetched comprehensive weather data for {location_name}")
