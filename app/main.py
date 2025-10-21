@@ -19,6 +19,13 @@ import logging
 from app.api.v1 import reports, geocoding
 from app.core.config import settings
 
+# Apply emergency error handling fixes
+try:
+    from app.services.emergency_fix import add_emergency_error_handling
+    add_emergency_error_handling()
+except Exception as e:
+    logging.warning(f"Could not apply emergency fixes: {e}")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
