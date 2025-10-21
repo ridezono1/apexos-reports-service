@@ -501,58 +501,43 @@ class NOAAWeatherService:
                 datatype = record.get("datatype", "")
                 value = record.get("value", 0)
                 
-                # More lenient thresholds to capture more weather events
-                if datatype == "PRCP" and value > 25:  # Light precipitation (>2.5mm)
+                # Much more lenient thresholds to capture Houston-area weather events
+                if datatype == "PRCP" and value >= 10:  # Any precipitation (>=1mm)
                     event_type = "precipitation"
-                    severity = "moderate" if value > 50 else "light"
+                    severity = "severe" if value >= 100 else "moderate" if value >= 50 else "light"
                     magnitude = value / 10.0  # Convert to mm
                     description = f"Precipitation event ({magnitude:.1f} mm)"
-                elif datatype == "PRCP" and value > 100:  # Heavy precipitation (>10mm)
-                    event_type = "flood"
-                    severity = "severe"
-                    magnitude = value / 10.0  # Convert to mm
-                    description = f"Heavy precipitation event ({magnitude:.1f} mm)"
-                elif datatype == "TMAX" and value > 280:  # Hot weather (>28°C)
+                elif datatype == "TMAX" and value >= 300:  # Hot weather (>=30°C / 86°F)
                     event_type = "heat"
-                    severity = "moderate" if value > 320 else "light"
+                    severity = "severe" if value >= 350 else "moderate"
                     magnitude = value / 10.0  # Convert to °C
                     description = f"Hot weather event ({magnitude:.1f}°C)"
-                elif datatype == "TMAX" and value > 350:  # Very hot weather (>35°C)
-                    event_type = "heat"
-                    severity = "severe"
-                    magnitude = value / 10.0  # Convert to °C
-                    description = f"Very hot weather event ({magnitude:.1f}°C)"
-                elif datatype == "TMIN" and value < -50:  # Cold weather (<-5°C)
+                elif datatype == "TMIN" and value <= 0:  # Cold weather (<=0°C / 32°F)
                     event_type = "cold"
-                    severity = "moderate" if value < -100 else "light"
+                    severity = "severe" if value <= -50 else "moderate"
                     magnitude = value / 10.0  # Convert to °C
                     description = f"Cold weather event ({magnitude:.1f}°C)"
-                elif datatype == "TMIN" and value < -200:  # Very cold weather (<-20°C)
-                    event_type = "cold"
-                    severity = "severe"
-                    magnitude = value / 10.0  # Convert to °C
-                    description = f"Very cold weather event ({magnitude:.1f}°C)"
-                elif datatype == "SNOW" and value > 10:  # Any snow (>1mm)
+                elif datatype == "SNOW" and value > 0:  # Any snow
                     event_type = "winter"
-                    severity = "moderate" if value > 100 else "light"
+                    severity = "severe" if value >= 100 else "moderate"
                     magnitude = value / 10.0  # Convert to mm
                     description = f"Snow event ({magnitude:.1f} mm)"
-                elif datatype == "SNOW" and value > 500:  # Heavy snow (>50mm)
+                elif datatype == "SNWD" and value > 0:  # Any snow depth
                     event_type = "winter"
-                    severity = "severe"
+                    severity = "severe" if value >= 100 else "moderate"
                     magnitude = value / 10.0  # Convert to mm
-                    description = f"Heavy snow event ({magnitude:.1f} mm)"
+                    description = f"Snow depth event ({magnitude:.1f} mm)"
                 elif datatype in ["WSFG", "WSF1", "WSF2", "WSF5", "WSF6", "WSF7", "WSF8", "WSF9", "WSFA", "WSFB", "WSFC", "WSFD", "WSFE", "WSFF", "WSFG", "WSFH", "WSFI", "WSFJ", "WSFK", "WSFL", "WSFM", "WSFN", "WSFO", "WSFP", "WSFQ", "WSFR", "WSFS", "WSFT", "WSFU", "WSFV", "WSFW", "WSFX", "WSFY", "WSFZ"]:
-                    # Wind speed data - convert to mph and check for severe thresholds
+                    # Wind speed data - much lower thresholds for Houston
                     wind_speed_mph = value * 0.621371  # Convert m/s to mph
-                    if wind_speed_mph > 40:  # Moderate wind (>40 mph)
+                    if wind_speed_mph >= 20:  # Moderate wind (>=20 mph)
                         event_type = "wind"
-                        severity = "severe" if wind_speed_mph > 60 else "moderate"
+                        severity = "severe" if wind_speed_mph >= 40 else "moderate"
                         magnitude = wind_speed_mph
                         description = f"High wind event ({magnitude:.1f} mph)"
             
             # Only return events that are actually severe weather
-            if event_type in ["hail", "wind", "tornado", "thunderstorm", "flood", "heat", "cold", "winter"]:
+            if event_type in ["hail", "wind", "tornado", "thunderstorm", "flood", "heat", "cold", "winter", "precipitation"]:
                 return {
                     "event_type": event_type,
                     "severity": severity,
