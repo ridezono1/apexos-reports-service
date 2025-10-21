@@ -331,11 +331,11 @@ class NOAAWeatherService:
                         
                         # Use different parameters based on dataset
                         if dataset_id == "GHCND":
-                            # For GHCND, use extent-based queries for better geographic precision
-                            # Include specific datatypes that indicate severe weather
+                            # For GHCND, use location-based queries with Texas FIPS code
+                            # This is more reliable than extent-based queries
                             params = {
                                 "datasetid": dataset_id,
-                                "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",
+                                "locationid": "FIPS:48",  # Texas FIPS code
                                 "startdate": current_start.isoformat(),
                                 "enddate": chunk_end.isoformat(),
                                 "limit": 1000,
