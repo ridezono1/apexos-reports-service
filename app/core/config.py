@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     noaa_timeout: int = 30
     noaa_max_retries: int = 3
     noaa_user_agent: str = "(ApexOS Reports Service, contact@apexos.com)"  # Required by NWS
+    
+    # NOAA CDO API rate limiting
+    noaa_cdo_requests_per_second: int = 5  # API limit
+    noaa_cdo_requests_per_day: int = 10000  # API limit
+    noaa_cdo_rate_limit_buffer: float = 0.8  # Use 80% of limits for safety
 
     # API Key Authentication
     api_keys_enabled: bool = True
