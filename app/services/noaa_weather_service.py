@@ -404,12 +404,157 @@ class NOAAWeatherService:
                     logger.warning(f"Error fetching {dataset_id} severe weather data: {e}")
                     continue
             
+            # If we didn't get enough severe weather events from CDO, supplement with NWS Storm Events
+            if len(events) < 10:  # Threshold for comprehensive data
+                logger.info("Supplementing with NWS Storm Events data")
+                storm_events = await self._fetch_nws_storm_events(latitude, longitude, start_date, end_date)
+                events.extend(storm_events)
+                
             logger.info(f"Total severe weather events found: {len(events)}")
             return events
             
         except Exception as e:
             logger.error(f"Error fetching CDO severe weather events: {e}")
             return []
+    
+    async def _fetch_nws_storm_events(
+        self,
+        latitude: float,
+        longitude: float,
+        start_date: date,
+        end_date: date
+    ) -> List[Dict[str, Any]]:
+        """Fetch severe weather events from NWS Storm Events Database."""
+        try:
+            events = []
+            
+            # NWS Storm Events API endpoint
+            base_url = "https://www.ncei.noaa.gov/stormevents/csv"
+            
+            # Calculate bounding box (50km radius around location)
+            lat_offset = 0.45  # ~50km offset
+            lon_offset = 0.45  # ~50km offset
+            
+            min_lat = latitude - lat_offset
+            max_lat = latitude + lat_offset
+            min_lon = longitude - lon_offset
+            max_lon = longitude + lon_offset
+            
+            # Generate URLs for each year in the date range
+            current_year = start_date.year
+            end_year = end_date.year
+            
+            while current_year <= end_year:
+                # NWS Storm Events CSV files are organized by year
+                url = f"{base_url}/StormEvents_details-ftp_v1.0_d{current_year}0101_c{current_year}1231.csv"
+                
+                try:
+                    async with httpx.AsyncClient(timeout=self.timeout) as client:
+                        response = await client.get(url)
+                        
+                        if response.status_code == 200:
+                            # Parse CSV data
+                            csv_content = response.text
+                            lines = csv_content.split('\n')
+                            
+                            if len(lines) > 1:  # Has header and data
+                                headers = lines[0].split(',')
+                                
+                                for line in lines[1:]:
+                                    if not line.strip():
+                                        continue
+                                        
+                                    values = line.split(',')
+                                    if len(values) >= len(headers):
+                                        # Create record dictionary
+                                        record = dict(zip(headers, values))
+                                        
+                                        # Check if event is within our date range and geographic bounds
+                                        try:
+                                            event_date = datetime.strptime(record.get('BEGIN_DATE_TIME', ''), '%Y-%m-%d %H:%M:%S').date()
+                                            event_lat = float(record.get('BEGIN_LAT', 0))
+                                            event_lon = float(record.get('BEGIN_LON', 0))
+                                            
+                                            if (start_date <= event_date <= end_date and
+                                                min_lat <= event_lat <= max_lat and
+                                                min_lon <= event_lon <= max_lon):
+                                                
+                                                # Convert to our event format
+                                                event = self._convert_storm_event_to_severe_weather_event(record)
+                                                if event:
+                                                    events.append(event)
+                                                    
+                                        except (ValueError, TypeError):
+                                            continue
+                                            
+                        else:
+                            logger.warning(f"HTTP error fetching NWS Storm Events for {current_year}: {response.status_code}")
+                            
+                except Exception as e:
+                    logger.warning(f"Error fetching NWS Storm Events for {current_year}: {e}")
+                    
+                current_year += 1
+                
+            logger.info(f"Fetched {len(events)} events from NWS Storm Events Database")
+            return events
+            
+        except Exception as e:
+            logger.error(f"Error fetching NWS Storm Events: {e}")
+            return []
+    
+    def _convert_storm_event_to_severe_weather_event(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Convert NWS Storm Event record to severe weather event format."""
+        try:
+            event_type = record.get('EVENT_TYPE', '').lower()
+            magnitude = record.get('MAGNITUDE', '')
+            magnitude_type = record.get('MAGNITUDE_TYPE', '')
+            
+            # Parse magnitude
+            try:
+                mag_value = float(magnitude) if magnitude else 0
+            except (ValueError, TypeError):
+                mag_value = 0
+                
+            # Determine severity based on event type and magnitude
+            severity = "moderate"
+            if event_type in ["tornado", "hail"] and mag_value > 0:
+                severity = "severe"
+            elif event_type in ["thunderstorm wind", "high wind"] and mag_value >= 60:
+                severity = "severe"
+            elif event_type in ["flash flood", "flood"] and mag_value > 0:
+                severity = "severe"
+                
+            # Format description
+            description = f"{event_type.title()} event"
+            if magnitude and magnitude_type:
+                description += f" ({magnitude} {magnitude_type})"
+                
+            # Format date
+            try:
+                date_str = record.get('BEGIN_DATE_TIME', '')
+                if date_str:
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                    date_str = date_obj.strftime('%Y-%m-%d')
+            except:
+                date_str = record.get('BEGIN_DATE_TIME', '')
+                
+            return {
+                "event_type": event_type,
+                "severity": severity,
+                "urgency": "immediate" if severity == "severe" else "expected",
+                "description": description,
+                "timestamp": date_str,
+                "source": "NWS-StormEvents",
+                "magnitude": mag_value,
+                "magnitude_type": magnitude_type,
+                "location": record.get('CZ_NAME', ''),
+                "state": record.get('STATE', ''),
+                "county": record.get('CZ_FIPS', '')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error converting storm event record: {e}")
+            return None
     
     async def _fetch_nws_current_alerts(
         self,
