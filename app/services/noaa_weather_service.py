@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.rate_limiter import CDORateLimiter, RateLimitExceededError
 
 logger = get_logger(__name__)
 
@@ -28,6 +29,13 @@ class NOAAWeatherService:
         self.timeout = settings.noaa_timeout
         self.max_retries = settings.noaa_max_retries
         self.user_agent = settings.noaa_user_agent
+        
+        # Initialize rate limiter for CDO API
+        self.rate_limiter = CDORateLimiter(
+            requests_per_second=settings.noaa_cdo_requests_per_second,
+            requests_per_day=settings.noaa_cdo_requests_per_day,
+            buffer_factor=settings.noaa_cdo_rate_limit_buffer
+        )
         
         if not self.cdo_api_token:
             logger.warning("NOAA CDO API token not configured - historical data will be limited")
@@ -226,7 +234,7 @@ class NOAAWeatherService:
         radius_km: float = 50.0
     ) -> List[Dict[str, Any]]:
         """
-        Get severe weather events from NWS alerts API.
+        Get severe weather events from NOAA CDO API and NWS alerts API.
         
         Args:
             latitude: Location latitude
@@ -239,12 +247,180 @@ class NOAAWeatherService:
             List of weather events
         """
         try:
-            # Get alerts for the area
-            alerts_url = f"{self.nws_base_url}/alerts"
+            events = []
             
-            # Calculate bounding box for alerts
+            # First, try to get historical severe weather events from NOAA CDO API
+            if self.cdo_api_token:
+                try:
+                    historical_events = await self._fetch_cdo_severe_weather_events(
+                        latitude, longitude, start_date, end_date, radius_km
+                    )
+                    events.extend(historical_events)
+                    logger.info(f"Fetched {len(historical_events)} historical severe weather events from NOAA CDO")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch historical severe weather events from NOAA CDO: {e}")
+            
+            # Also get current alerts from NWS alerts API
+            try:
+                current_alerts = await self._fetch_nws_current_alerts(
+                    latitude, longitude, radius_km
+                )
+                events.extend(current_alerts)
+                logger.info(f"Fetched {len(current_alerts)} current weather alerts from NWS")
+            except Exception as e:
+                logger.warning(f"Failed to fetch current alerts from NWS: {e}")
+            
+            # Sort events by timestamp (most recent first)
+            events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            
+            logger.info(f"Total weather events fetched: {len(events)}")
+            return events
+                
+        except Exception as e:
+            logger.error(f"Error fetching weather events from NOAA for {latitude}, {longitude}: {e}")
+            sentry_sdk.capture_exception(e)
+            return []
+    
+    async def _fetch_cdo_severe_weather_events(
+        self,
+        latitude: float,
+        longitude: float,
+        start_date: date,
+        end_date: date,
+        radius_km: float = 50.0
+    ) -> List[Dict[str, Any]]:
+        """Fetch historical severe weather events from NOAA CDO API."""
+        try:
+            events = []
+            
+            # Calculate bounding box for the search area
             lat_offset = radius_km / 111.0  # Rough conversion km to degrees
             lon_offset = radius_km / (111.0 * abs(latitude / 90.0))  # Adjust for latitude
+            
+            min_lat = latitude - lat_offset
+            max_lat = latitude + lat_offset
+            min_lon = longitude - lon_offset
+            max_lon = longitude + lon_offset
+            
+            # Try multiple severe weather datasets
+            # Note: NEXRAD2, NEXRAD3, and SWDI may require different parameters or be restricted
+            severe_weather_datasets = [
+                "GHCND"         # Global Historical Climatology Network Daily (primary)
+                # "NEXRAD2",      # NEXRAD Level II data (severe weather) - may require special access
+                # "NEXRAD3",      # NEXRAD Level III data (severe weather) - may require special access  
+                # "SWDI",         # Severe Weather Data Inventory - may require special access
+            ]
+            
+            for dataset_id in severe_weather_datasets:
+                try:
+                    # Apply rate limiting before CDO API request
+                    await self.rate_limiter.wait_if_needed()
+                    
+                    data_url = f"{self.cdo_base_url}/data"
+                    
+                    # Break date range into 1-year chunks (NOAA CDO API limit)
+                    current_start = start_date
+                    all_results = []
+                    
+                    while current_start < end_date:
+                        # Calculate end date for this chunk (max 1 year)
+                        chunk_end = min(
+                            date(current_start.year + 1, current_start.month, current_start.day),
+                            end_date
+                        )
+                        
+                        # Use different parameters based on dataset
+                        if dataset_id == "GHCND":
+                            # For GHCND, use extent-based queries for better geographic precision
+                            # Include specific datatypes that indicate severe weather
+                            params = {
+                                "datasetid": dataset_id,
+                                "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",
+                                "startdate": current_start.isoformat(),
+                                "enddate": chunk_end.isoformat(),
+                                "limit": 1000,
+                                "includemetadata": "false",
+                                # Focus on severe weather datatypes
+                                "datatypeid": "PRCP,TMAX,TMIN,SNOW,SNWD,WSFG,WSF1,WSF2,WSF5,WSF6,WSF7,WSF8,WSF9,WSFA,WSFB,WSFC,WSFD,WSFE,WSFF,WSFG,WSFH,WSFI,WSFJ,WSFK,WSFL,WSFM,WSFN,WSFO,WSFP,WSFQ,WSFR,WSFS,WSFT,WSFU,WSFV,WSFW,WSFX,WSFY,WSFZ"
+                            }
+                        else:
+                            # For other datasets, use extent parameter
+                            params = {
+                                "datasetid": dataset_id,
+                                "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",
+                                "startdate": current_start.isoformat(),
+                                "enddate": chunk_end.isoformat(),
+                                "limit": 1000,
+                                "includemetadata": "false"
+                            }
+                        
+                        logger.debug(f"Fetching {dataset_id} data for {current_start} to {chunk_end}")
+                        
+                        async with httpx.AsyncClient(timeout=self.timeout) as client:
+                            response = await client.get(
+                                data_url,
+                                params=params,
+                                headers={"token": self.cdo_api_token}
+                            )
+                            response.raise_for_status()
+                            data = response.json()
+                            
+                            results = data.get("results", [])
+                            all_results.extend(results)
+                            
+                            # Apply rate limiting between chunks
+                            if chunk_end < end_date:
+                                await self.rate_limiter.wait_if_needed()
+                        
+                        # Move to next chunk
+                        current_start = chunk_end
+                    
+                    if all_results:
+                        logger.info(f"Found {len(all_results)} total records in {dataset_id} dataset")
+                        
+                        # Convert CDO records to weather events
+                        for record in all_results:
+                            event = self._convert_cdo_record_to_severe_weather_event(record, dataset_id)
+                            if event:
+                                events.append(event)
+                    else:
+                        logger.debug(f"No severe weather data found in {dataset_id} dataset")
+                    
+                    # If we found data in this dataset, we can stop searching
+                    if all_results:
+                        break
+                        
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 401:
+                        logger.error("NOAA CDO API token is invalid or expired")
+                        break
+                    elif e.response.status_code == 429:
+                        logger.error("NOAA CDO API rate limit exceeded")
+                        break
+                    else:
+                        logger.warning(f"HTTP error fetching {dataset_id} data: {e.response.status_code}")
+                        continue
+                except Exception as e:
+                    logger.warning(f"Error fetching {dataset_id} severe weather data: {e}")
+                    continue
+            
+            logger.info(f"Total severe weather events found: {len(events)}")
+            return events
+            
+        except Exception as e:
+            logger.error(f"Error fetching CDO severe weather events: {e}")
+            return []
+    
+    async def _fetch_nws_current_alerts(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_km: float = 50.0
+    ) -> List[Dict[str, Any]]:
+        """Fetch current weather alerts from NWS alerts API."""
+        try:
+            # Get alerts for the area
+            alerts_url = f"{self.nws_base_url}/alerts"
             
             params = {
                 "point": f"{latitude},{longitude}",
@@ -271,16 +447,135 @@ class NOAAWeatherService:
                 return events
                 
         except Exception as e:
-            logger.error(f"Error fetching weather events from NOAA for {latitude}, {longitude}: {e}")
-            sentry_sdk.capture_exception(e)
+            logger.error(f"Error fetching NWS current alerts: {e}")
             return []
     
+    def _convert_cdo_record_to_severe_weather_event(
+        self,
+        record: Dict[str, Any],
+        dataset_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Convert CDO record to severe weather event format."""
+        try:
+            # Extract basic information
+            date_str = record.get("date")
+            station_id = record.get("station")
+            
+            if not date_str:
+                return None
+            
+            # Determine event type based on dataset and data values
+            event_type = "unknown"
+            severity = "moderate"
+            magnitude = None
+            description = f"Weather event recorded on {date_str}"
+            
+            if dataset_id == "NEXRAD2" or dataset_id == "NEXRAD3":
+                # NEXRAD data - look for severe weather indicators
+                if record.get("REFL") and record.get("REFL") > 50:  # High reflectivity (hail)
+                    event_type = "hail"
+                    severity = "severe"
+                    magnitude = record.get("REFL")
+                    description = f"Hail event detected (reflectivity: {magnitude} dBZ)"
+                elif record.get("VEL") and abs(record.get("VEL")) > 30:  # High velocity (wind)
+                    event_type = "wind"
+                    severity = "severe"
+                    magnitude = abs(record.get("VEL"))
+                    description = f"High wind event detected (velocity: {magnitude} m/s)"
+                elif record.get("REFL") and record.get("REFL") > 40:  # Moderate reflectivity
+                    event_type = "thunderstorm"
+                    severity = "moderate"
+                    description = f"Thunderstorm activity detected"
+            
+            elif dataset_id == "SWDI":
+                # Severe Weather Data Inventory
+                event_type = record.get("event_type", "unknown").lower()
+                severity = record.get("severity", "moderate").lower()
+                magnitude = record.get("magnitude")
+                description = record.get("description", f"Severe weather event: {event_type}")
+            
+            elif dataset_id == "GHCND":
+                # Look for severe weather indicators in GHCND data
+                # Note: Temperature values are in tenths of degrees Celsius
+                # Note: Precipitation values are in tenths of millimeters
+                datatype = record.get("datatype", "")
+                value = record.get("value", 0)
+                
+                # More lenient thresholds to capture more weather events
+                if datatype == "PRCP" and value > 25:  # Light precipitation (>2.5mm)
+                    event_type = "precipitation"
+                    severity = "moderate" if value > 50 else "light"
+                    magnitude = value / 10.0  # Convert to mm
+                    description = f"Precipitation event ({magnitude:.1f} mm)"
+                elif datatype == "PRCP" and value > 100:  # Heavy precipitation (>10mm)
+                    event_type = "flood"
+                    severity = "severe"
+                    magnitude = value / 10.0  # Convert to mm
+                    description = f"Heavy precipitation event ({magnitude:.1f} mm)"
+                elif datatype == "TMAX" and value > 280:  # Hot weather (>28°C)
+                    event_type = "heat"
+                    severity = "moderate" if value > 320 else "light"
+                    magnitude = value / 10.0  # Convert to °C
+                    description = f"Hot weather event ({magnitude:.1f}°C)"
+                elif datatype == "TMAX" and value > 350:  # Very hot weather (>35°C)
+                    event_type = "heat"
+                    severity = "severe"
+                    magnitude = value / 10.0  # Convert to °C
+                    description = f"Very hot weather event ({magnitude:.1f}°C)"
+                elif datatype == "TMIN" and value < -50:  # Cold weather (<-5°C)
+                    event_type = "cold"
+                    severity = "moderate" if value < -100 else "light"
+                    magnitude = value / 10.0  # Convert to °C
+                    description = f"Cold weather event ({magnitude:.1f}°C)"
+                elif datatype == "TMIN" and value < -200:  # Very cold weather (<-20°C)
+                    event_type = "cold"
+                    severity = "severe"
+                    magnitude = value / 10.0  # Convert to °C
+                    description = f"Very cold weather event ({magnitude:.1f}°C)"
+                elif datatype == "SNOW" and value > 10:  # Any snow (>1mm)
+                    event_type = "winter"
+                    severity = "moderate" if value > 100 else "light"
+                    magnitude = value / 10.0  # Convert to mm
+                    description = f"Snow event ({magnitude:.1f} mm)"
+                elif datatype == "SNOW" and value > 500:  # Heavy snow (>50mm)
+                    event_type = "winter"
+                    severity = "severe"
+                    magnitude = value / 10.0  # Convert to mm
+                    description = f"Heavy snow event ({magnitude:.1f} mm)"
+                elif datatype in ["WSFG", "WSF1", "WSF2", "WSF5", "WSF6", "WSF7", "WSF8", "WSF9", "WSFA", "WSFB", "WSFC", "WSFD", "WSFE", "WSFF", "WSFG", "WSFH", "WSFI", "WSFJ", "WSFK", "WSFL", "WSFM", "WSFN", "WSFO", "WSFP", "WSFQ", "WSFR", "WSFS", "WSFT", "WSFU", "WSFV", "WSFW", "WSFX", "WSFY", "WSFZ"]:
+                    # Wind speed data - convert to mph and check for severe thresholds
+                    wind_speed_mph = value * 0.621371  # Convert m/s to mph
+                    if wind_speed_mph > 40:  # Moderate wind (>40 mph)
+                        event_type = "wind"
+                        severity = "severe" if wind_speed_mph > 60 else "moderate"
+                        magnitude = wind_speed_mph
+                        description = f"High wind event ({magnitude:.1f} mph)"
+            
+            # Only return events that are actually severe weather
+            if event_type in ["hail", "wind", "tornado", "thunderstorm", "flood", "heat", "cold", "winter"]:
+                return {
+                    "event_type": event_type,
+                    "severity": severity,
+                    "urgency": "immediate" if severity == "severe" else "expected",
+                    "description": description,
+                    "timestamp": date_str,
+                    "source": f"NOAA-CDO-{dataset_id}",
+                    "magnitude": magnitude,
+                    "station_id": station_id
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error converting CDO record to severe weather event: {e}")
+            return None
+
     async def get_point_metadata(self, latitude: float, longitude: float) -> Dict[str, Any]:
         """Get point metadata from NWS Points API."""
         try:
             url = f"{self.nws_base_url}/points/{latitude},{longitude}"
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 response = await client.get(
                     url,
                     headers={"User-Agent": self.user_agent}
@@ -288,24 +583,69 @@ class NOAAWeatherService:
                 response.raise_for_status()
                 return response.json()
                 
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 301:
+                # Handle redirect manually if needed
+                logger.warning(f"Redirect encountered for {latitude}, {longitude}, attempting to follow")
+                try:
+                    redirect_url = e.response.headers.get("location")
+                    if redirect_url:
+                        async with httpx.AsyncClient(timeout=self.timeout) as client:
+                            response = await client.get(
+                                redirect_url,
+                                headers={"User-Agent": self.user_agent}
+                            )
+                            response.raise_for_status()
+                            return response.json()
+                except Exception as redirect_error:
+                    logger.error(f"Failed to follow redirect for {latitude}, {longitude}: {redirect_error}")
+                    raise
+            else:
+                logger.error(f"HTTP error fetching point metadata for {latitude}, {longitude}: {e}")
+                raise
         except Exception as e:
             logger.error(f"Error fetching point metadata for {latitude}, {longitude}: {e}")
             raise
     
     async def _find_nearest_cdo_station(self, latitude: float, longitude: float) -> Optional[str]:
-        """Find nearest CDO weather station."""
+        """Find nearest CDO weather station using geographic extent."""
         try:
             if not self.cdo_api_token:
+                logger.warning("NOAA CDO API token not configured")
                 return None
             
-            # Search for stations near the location
+            # Search for stations near the location using extent parameter
             stations_url = f"{self.cdo_base_url}/stations"
+            
+            # Calculate date range to ensure station has recent data (last 2 years)
+            end_date = date.today()
+            start_date = end_date - timedelta(days=730)
+            
+            # Calculate proper bounding box (NOAA requires different min/max values)
+            # Use a small offset to create a valid bounding box
+            lat_offset = 0.01  # ~1km offset
+            lon_offset = 0.01  # ~1km offset
+            
+            min_lat = latitude - lat_offset
+            max_lat = latitude + lat_offset
+            min_lon = longitude - lon_offset
+            max_lon = longitude + lon_offset
+            
             params = {
-                "locationid": f"ZIP:{latitude},{longitude}",
+                "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",  # Valid geographic bounding box
+                "datasetid": "GHCND",  # Ensure station supports Global Historical Climatology Network Daily
+                "startdate": start_date.isoformat(),
+                "enddate": end_date.isoformat(),
                 "limit": 1,
                 "sortfield": "distance",
-                "sortorder": "asc"
+                "sortorder": "asc",
+                "includemetadata": "false"
             }
+            
+            logger.debug(f"Searching for CDO stations near {latitude}, {longitude} with params: {params}")
+            
+            # Apply rate limiting before CDO API request
+            await self.rate_limiter.wait_if_needed()
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
@@ -317,11 +657,33 @@ class NOAAWeatherService:
                 data = response.json()
                 
                 stations = data.get("results", [])
-                if stations:
-                    return stations[0].get("id")
+                if not stations:
+                    logger.warning(f"No CDO stations found near {latitude}, {longitude}")
+                    return None
                 
-                return None
+                station = stations[0]
+                station_id = station.get("id")
+                station_name = station.get("name", "Unknown")
+                station_distance = station.get("distance", "Unknown")
                 
+                logger.info(
+                    f"Found nearest CDO station: {station_name} (ID: {station_id}, "
+                    f"Distance: {station_distance})"
+                )
+                
+                return station_id
+                
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                logger.error("NOAA CDO API token is invalid or expired")
+            elif e.response.status_code == 429:
+                logger.error("NOAA CDO API rate limit exceeded")
+            else:
+                logger.error(f"HTTP error finding CDO station: {e.response.status_code}")
+            return None
+        except RateLimitExceededError as e:
+            logger.error(f"Rate limit exceeded: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error finding nearest CDO station: {e}")
             return None
@@ -332,7 +694,7 @@ class NOAAWeatherService:
         start_date: date,
         end_date: date
     ) -> Dict[str, Any]:
-        """Fetch historical data from CDO API."""
+        """Fetch historical data from CDO API with rate limiting and pagination."""
         try:
             data_url = f"{self.cdo_base_url}/data"
             params = {
@@ -341,37 +703,86 @@ class NOAAWeatherService:
                 "startdate": start_date.isoformat(),
                 "enddate": end_date.isoformat(),
                 "units": "metric",
-                "limit": 1000
+                "limit": 1000,
+                "includemetadata": "false"  # Improve response time
             }
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    data_url,
-                    params=params,
-                    headers={"token": self.cdo_api_token}
-                )
-                response.raise_for_status()
-                data = response.json()
+            logger.debug(f"Fetching CDO historical data for station {station_id} from {start_date} to {end_date}")
+            
+            # Apply rate limiting before CDO API request
+            await self.rate_limiter.wait_if_needed()
+            
+            all_observations = []
+            offset = 0
+            
+            while True:
+                # Add pagination parameters
+                current_params = params.copy()
+                current_params["offset"] = offset
                 
-                # Convert CDO data to standard format
-                observations = []
-                for record in data.get("results", []):
-                    obs = self._convert_cdo_record_to_observation(record)
-                    if obs:
-                        observations.append(obs)
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.get(
+                        data_url,
+                        params=current_params,
+                        headers={"token": self.cdo_api_token}
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    results = data.get("results", [])
+                    if not results:
+                        break
+                    
+                    # Convert CDO data to standard format
+                    for record in results:
+                        obs = self._convert_cdo_record_to_observation(record)
+                        if obs:
+                            all_observations.append(obs)
+                    
+                    # Check if we have more data to fetch
+                    metadata = data.get("metadata", {})
+                    resultset = metadata.get("resultset", {})
+                    count = resultset.get("count", 0)
+                    limit = resultset.get("limit", 1000)
+                    
+                    logger.debug(f"Fetched {len(results)} records (offset: {offset}, total: {count})")
+                    
+                    # If we got fewer records than the limit, we've reached the end
+                    if len(results) < limit:
+                        break
+                    
+                    offset += limit
+                    
+                    # Apply rate limiting for next page request
+                    if offset < count:
+                        await self.rate_limiter.wait_if_needed()
+            
+            return {
+                "observations": all_observations,
+                "source": "NOAA-CDO",
+                "station_id": station_id,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "total_records": len(all_observations),
+                "pages_fetched": (offset // 1000) + 1
+            }
                 
-                return {
-                    "observations": observations,
-                    "source": "NOAA-CDO",
-                    "station_id": station_id,
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                    "total_records": len(observations)
-                }
-                
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                logger.error("NOAA CDO API token is invalid or expired")
+            elif e.response.status_code == 429:
+                logger.error("NOAA CDO API rate limit exceeded")
+            elif e.response.status_code == 400:
+                logger.error(f"Bad request to CDO API: {e.response.text}")
+            else:
+                logger.error(f"HTTP error fetching CDO data: {e.response.status_code}")
+            return {"observations": [], "source": "NOAA-CDO", "total_records": 0, "error": f"HTTP {e.response.status_code}"}
+        except RateLimitExceededError as e:
+            logger.error(f"Rate limit exceeded: {e}")
+            return {"observations": [], "source": "NOAA-CDO", "total_records": 0, "error": "Rate limit exceeded"}
         except Exception as e:
             logger.error(f"Error fetching CDO historical data: {e}")
-            return {"observations": [], "source": "NOAA-CDO", "total_records": 0}
+            return {"observations": [], "source": "NOAA-CDO", "total_records": 0, "error": str(e)}
     
     def _convert_nws_observation_to_weather_data(
         self,
