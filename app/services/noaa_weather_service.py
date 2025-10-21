@@ -622,9 +622,9 @@ class NOAAWeatherService:
             start_date = end_date - timedelta(days=730)
             
             # Calculate proper bounding box (NOAA requires different min/max values)
-            # Use a small offset to create a valid bounding box
-            lat_offset = 0.01  # ~1km offset
-            lon_offset = 0.01  # ~1km offset
+            # Use a larger offset to ensure we find stations
+            lat_offset = 0.1  # ~11km offset
+            lon_offset = 0.1  # ~11km offset
             
             min_lat = latitude - lat_offset
             max_lat = latitude + lat_offset
@@ -636,7 +636,7 @@ class NOAAWeatherService:
                 "datasetid": "GHCND",  # Ensure station supports Global Historical Climatology Network Daily
                 "startdate": start_date.isoformat(),
                 "enddate": end_date.isoformat(),
-                "limit": 1,
+                "limit": 5,  # Get more stations to choose from
                 "sortfield": "distance",
                 "sortorder": "asc",
                 "includemetadata": "false"
