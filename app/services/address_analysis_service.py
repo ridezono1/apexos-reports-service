@@ -319,7 +319,8 @@ class AddressAnalysisService:
         severe_events = []
 
         for event in weather_events:
-            event_type = event.get("event", "").lower()
+            # Handle both NOAA and other weather event formats
+            event_type = event.get("event", event.get("event_type", "")).lower()
             magnitude = event.get("magnitude", "")
             magnitude_type = event.get("magnitude_type", "")
             severity = event.get("severity", "Unknown")
@@ -445,15 +446,68 @@ class AddressAnalysisService:
                         algorithm_magnitude = "High Fire Risk"
                         severity = "Moderate"
 
+            # NOAA WEATHER EVENTS: Include all weather events from NOAA
+            elif "precipitation" in event_type or "rain" in event_type:
+                is_actionable = True
+                if mag_value >= 50:  # Heavy precipitation (≥50mm)
+                    algorithm_magnitude = "Heavy Precipitation"
+                    severity = "Severe"
+                elif mag_value >= 25:  # Moderate precipitation (≥25mm)
+                    algorithm_magnitude = "Moderate Precipitation"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Precipitation"
+                    severity = "Moderate"
+
+            elif "heat" in event_type:
+                is_actionable = True
+                if mag_value >= 35:  # Very hot (≥35°C / 95°F)
+                    algorithm_magnitude = "Extreme Heat"
+                    severity = "Severe"
+                elif mag_value >= 30:  # Hot (≥30°C / 86°F)
+                    algorithm_magnitude = "High Temperature"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Elevated Temperature"
+                    severity = "Moderate"
+
+            elif "cold" in event_type:
+                is_actionable = True
+                if mag_value <= -10:  # Very cold (≤-10°C / 14°F)
+                    algorithm_magnitude = "Extreme Cold"
+                    severity = "Severe"
+                elif mag_value <= 0:  # Freezing (≤0°C / 32°F)
+                    algorithm_magnitude = "Freezing Temperature"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Low Temperature"
+                    severity = "Moderate"
+
+            elif "winter" in event_type or "snow" in event_type:
+                is_actionable = True
+                if mag_value >= 100:  # Heavy snow (≥100mm)
+                    algorithm_magnitude = "Heavy Snow"
+                    severity = "Severe"
+                elif mag_value >= 25:  # Moderate snow (≥25mm)
+                    algorithm_magnitude = "Moderate Snow"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Snow"
+                    severity = "Moderate"
+
             # Only include events that meet business thresholds
             if is_actionable:
                 # Format date to match HailTrace style (e.g., "August 18, 2025")
-                date_str = event.get("date", "Unknown")
+                date_str = event.get("date", event.get("timestamp", "Unknown"))
                 date_formatted = date_str
                 if date_str != "Unknown":
                     try:
                         from datetime import datetime
-                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        # Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS" formats
+                        if "T" in date_str:
+                            date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        else:
+                            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                         date_formatted = date_obj.strftime("%B %d, %Y")
                     except:
                         date_formatted = date_str
@@ -461,7 +515,7 @@ class AddressAnalysisService:
                 formatted_event = {
                     "date": date_str,  # Keep original for sorting
                     "date_formatted": date_formatted,  # Human-readable format
-                    "type": event.get("event", "Unknown").title(),
+                    "type": event.get("event_type", event.get("event", "Unknown")).title(),
                     "duration": self._calculate_event_duration(event),
                     "severity": severity,
                     "magnitude": self._format_magnitude(event_type, mag_value, magnitude_type),
