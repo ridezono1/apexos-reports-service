@@ -16,11 +16,25 @@ class Settings(BaseSettings):
     # Google Maps API configuration
     google_maps_api_key: Optional[str] = None
 
+    # Weather Provider Configuration
+    weather_provider: str = "noaa"  # Options: "tomorrow_io", "noaa", "auto"
+    # - "tomorrow_io": Use Tomorrow.io only (fallback to NOAA on failure)
+    # - "noaa": Use NOAA only (disable Tomorrow.io completely)
+    # - "auto": Auto-select best provider based on availability
+
     # Tomorrow.io Weather API configuration
     tomorrow_io_api_key: Optional[str] = None
     tomorrow_io_base_url: str = "https://api.tomorrow.io/v4"
     tomorrow_io_timeout: int = 30
     tomorrow_io_max_retries: int = 3
+
+    # NOAA/NWS API configuration
+    noaa_cdo_api_token: Optional[str] = None  # CDO API requires free token
+    noaa_nws_base_url: str = "https://api.weather.gov"
+    noaa_cdo_base_url: str = "https://www.ncei.noaa.gov/cdo-web/api/v2"
+    noaa_timeout: int = 30
+    noaa_max_retries: int = 3
+    noaa_user_agent: str = "(ApexOS Reports Service, contact@apexos.com)"  # Required by NWS
 
     # API Key Authentication
     api_keys_enabled: bool = True

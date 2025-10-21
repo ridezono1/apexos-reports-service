@@ -12,6 +12,7 @@ import sentry_sdk
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.tomorrow_io_service import get_tomorrow_io_service
+from app.services.noaa_weather_service import get_noaa_weather_service
 
 logger = get_logger(__name__)
 
@@ -27,7 +28,10 @@ class WeatherDataService:
     def __init__(self):
         """Initialize weather data service."""
         self.tomorrow_io = get_tomorrow_io_service()
-        logger.info("Weather data service initialized - using Tomorrow.io Weather API")
+        self.noaa_service = get_noaa_weather_service()
+        self.weather_provider = settings.weather_provider
+        
+        logger.info(f"Weather data service initialized - using {self.weather_provider} as primary provider")
     
     async def get_current_weather(
         self,
@@ -47,20 +51,49 @@ class WeatherDataService:
             Current weather data
         """
         try:
-            # Use Tomorrow.io Timeline API for current weather
-            timeline_data = await self.tomorrow_io.get_current_and_forecast(
-                latitude, longitude, timesteps=['1h']
-            )
-            
-            current_weather = timeline_data.get("current_weather", {})
-            if current_weather:
-                # Convert Tomorrow.io format to expected format
-                return self._convert_tomorrow_io_current_weather(current_weather, location_name)
-            
-            # Fallback to empty data if Tomorrow.io fails
-            logger.warning(f"Tomorrow.io API failed for {latitude}, {longitude}, using fallback data")
-            return self._get_fallback_weather_data(latitude, longitude, location_name)
-            
+            if self.weather_provider == "noaa":
+                # Use NOAA as primary provider
+                return await self.noaa_service.get_current_weather(latitude, longitude, location_name)
+            elif self.weather_provider == "tomorrow_io":
+                # Use Tomorrow.io as primary provider with NOAA fallback
+                try:
+                    timeline_data = await self.tomorrow_io.get_current_and_forecast(
+                        latitude, longitude, timesteps=['1h']
+                    )
+                    
+                    current_weather = timeline_data.get("current_weather", {})
+                    if current_weather:
+                        return self._convert_tomorrow_io_current_weather(current_weather, location_name)
+                    
+                    # Fallback to NOAA if Tomorrow.io returns empty data
+                    logger.warning(f"Tomorrow.io returned empty data for {latitude}, {longitude}, using NOAA backup")
+                    return await self.noaa_service.get_current_weather(latitude, longitude, location_name)
+                    
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io failed for {latitude}, {longitude}, using NOAA backup: {e}")
+                    sentry_sdk.capture_message(f"Tomorrow.io failure, NOAA backup active: {e}")
+                    return await self.noaa_service.get_current_weather(latitude, longitude, location_name)
+            elif self.weather_provider == "auto":
+                # Auto-select: try Tomorrow.io first, fallback to NOAA
+                try:
+                    timeline_data = await self.tomorrow_io.get_current_and_forecast(
+                        latitude, longitude, timesteps=['1h']
+                    )
+                    
+                    current_weather = timeline_data.get("current_weather", {})
+                    if current_weather:
+                        return self._convert_tomorrow_io_current_weather(current_weather, location_name)
+                    
+                    # Fallback to NOAA if Tomorrow.io returns empty data
+                    logger.info(f"Tomorrow.io returned empty data for {latitude}, {longitude}, using NOAA")
+                    return await self.noaa_service.get_current_weather(latitude, longitude, location_name)
+                    
+                except Exception as e:
+                    logger.info(f"Tomorrow.io failed for {latitude}, {longitude}, using NOAA: {e}")
+                    return await self.noaa_service.get_current_weather(latitude, longitude, location_name)
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching current weather for {latitude}, {longitude}: {e}")
             # Return fallback data instead of raising exception
@@ -84,20 +117,50 @@ class WeatherDataService:
             Weather forecast data
         """
         try:
-            # Use Tomorrow.io Timeline API for forecasts (up to 15 days)
-            timeline_data = await self.tomorrow_io.get_current_and_forecast(
-                latitude, longitude, timesteps=['1d']
-            )
-            
-            forecast = timeline_data.get("forecast", [])
-            if forecast:
-                # Limit to requested number of days
-                limited_forecast = forecast[:days]
-                return self._convert_tomorrow_io_forecast(limited_forecast)
-            
-            # Return empty forecast if Tomorrow.io fails
-            return {"forecasts": [], "source": "Tomorrow.io", "total_periods": 0}
-            
+            if self.weather_provider == "noaa":
+                # Use NOAA as primary provider
+                return await self.noaa_service.get_weather_forecast(latitude, longitude, days)
+            elif self.weather_provider == "tomorrow_io":
+                # Use Tomorrow.io as primary provider with NOAA fallback
+                try:
+                    timeline_data = await self.tomorrow_io.get_current_and_forecast(
+                        latitude, longitude, timesteps=['1d']
+                    )
+                    
+                    forecast = timeline_data.get("forecast", [])
+                    if forecast:
+                        limited_forecast = forecast[:days]
+                        return self._convert_tomorrow_io_forecast(limited_forecast)
+                    
+                    # Fallback to NOAA if Tomorrow.io returns empty data
+                    logger.warning(f"Tomorrow.io returned empty forecast for {latitude}, {longitude}, using NOAA backup")
+                    return await self.noaa_service.get_weather_forecast(latitude, longitude, days)
+                    
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io forecast failed for {latitude}, {longitude}, using NOAA backup: {e}")
+                    return await self.noaa_service.get_weather_forecast(latitude, longitude, days)
+            elif self.weather_provider == "auto":
+                # Auto-select: try Tomorrow.io first, fallback to NOAA
+                try:
+                    timeline_data = await self.tomorrow_io.get_current_and_forecast(
+                        latitude, longitude, timesteps=['1d']
+                    )
+                    
+                    forecast = timeline_data.get("forecast", [])
+                    if forecast:
+                        limited_forecast = forecast[:days]
+                        return self._convert_tomorrow_io_forecast(limited_forecast)
+                    
+                    # Fallback to NOAA if Tomorrow.io returns empty data
+                    logger.info(f"Tomorrow.io returned empty forecast for {latitude}, {longitude}, using NOAA")
+                    return await self.noaa_service.get_weather_forecast(latitude, longitude, days)
+                    
+                except Exception as e:
+                    logger.info(f"Tomorrow.io forecast failed for {latitude}, {longitude}, using NOAA: {e}")
+                    return await self.noaa_service.get_weather_forecast(latitude, longitude, days)
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching weather forecast for {latitude}, {longitude}: {e}")
             raise
@@ -123,7 +186,7 @@ class WeatherDataService:
             Historical weather data with trend analysis
         """
         try:
-            # Use current date as end date if not provided
+            # Always use current date as end date for 24-month rolling window
             if end_date is None:
                 end_date = date.today()
             
@@ -134,33 +197,72 @@ class WeatherDataService:
             if not (180 <= period_days <= 185 or 270 <= period_days <= 275 or 720 <= period_days <= 735):
                 raise ValueError("Analysis period must be exactly 6 months, 9 months, or 24 months")
             
-            # Use Tomorrow.io Historical API for extended periods
-            historical_data = await self.tomorrow_io.get_historical_weather(
-                latitude, longitude, start_date, end_date
-            )
-            
-            # Add trend analysis for all periods
-            historical_data["trend_analysis"] = self._analyze_weather_trends(
-                historical_data.get("observations", [])
-            )
-            historical_data["seasonal_analysis"] = self._analyze_seasonal_patterns(
-                historical_data.get("observations", []), start_date, end_date
-            )
-            
-            # Add period-specific analysis
-            historical_data["period_analysis"] = self._analyze_period_patterns(
-                historical_data.get("observations", []), period_days
-            )
-            
-            # Add current date context
-            historical_data["analysis_context"] = {
-                "analysis_date": end_date.isoformat(),
-                "period_length_days": period_days,
-                "period_type": "6_month" if 180 <= period_days <= 185 else "9_month" if 270 <= period_days <= 275 else "24_month"
-            }
-            
-            return historical_data
-            
+            if self.weather_provider == "noaa":
+                # Use NOAA as primary provider
+                return await self.noaa_service.get_historical_weather(latitude, longitude, start_date, end_date)
+            elif self.weather_provider == "tomorrow_io":
+                # Use Tomorrow.io as primary provider with NOAA fallback
+                try:
+                    historical_data = await self.tomorrow_io.get_historical_weather(
+                        latitude, longitude, start_date, end_date
+                    )
+                    
+                    # Add trend analysis for all periods
+                    historical_data["trend_analysis"] = self._analyze_weather_trends(
+                        historical_data.get("observations", [])
+                    )
+                    historical_data["seasonal_analysis"] = self._analyze_seasonal_patterns(
+                        historical_data.get("observations", []), start_date, end_date
+                    )
+                    historical_data["period_analysis"] = self._analyze_period_patterns(
+                        historical_data.get("observations", []), period_days
+                    )
+                    
+                    # Add current date context
+                    historical_data["analysis_context"] = {
+                        "analysis_date": end_date.isoformat(),
+                        "period_length_days": period_days,
+                        "period_type": "6_month" if 180 <= period_days <= 185 else "9_month" if 270 <= period_days <= 275 else "24_month"
+                    }
+                    
+                    return historical_data
+                    
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io historical data failed for {latitude}, {longitude}, using NOAA backup: {e}")
+                    return await self.noaa_service.get_historical_weather(latitude, longitude, start_date, end_date)
+            elif self.weather_provider == "auto":
+                # Auto-select: try Tomorrow.io first, fallback to NOAA
+                try:
+                    historical_data = await self.tomorrow_io.get_historical_weather(
+                        latitude, longitude, start_date, end_date
+                    )
+                    
+                    # Add trend analysis for all periods
+                    historical_data["trend_analysis"] = self._analyze_weather_trends(
+                        historical_data.get("observations", [])
+                    )
+                    historical_data["seasonal_analysis"] = self._analyze_seasonal_patterns(
+                        historical_data.get("observations", []), start_date, end_date
+                    )
+                    historical_data["period_analysis"] = self._analyze_period_patterns(
+                        historical_data.get("observations", []), period_days
+                    )
+                    
+                    # Add current date context
+                    historical_data["analysis_context"] = {
+                        "analysis_date": end_date.isoformat(),
+                        "period_length_days": period_days,
+                        "period_type": "6_month" if 180 <= period_days <= 185 else "9_month" if 270 <= period_days <= 275 else "24_month"
+                    }
+                    
+                    return historical_data
+                    
+                except Exception as e:
+                    logger.info(f"Tomorrow.io historical data failed for {latitude}, {longitude}, using NOAA: {e}")
+                    return await self.noaa_service.get_historical_weather(latitude, longitude, start_date, end_date)
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching historical weather for {latitude}, {longitude}: {e}")
             raise
@@ -187,10 +289,30 @@ class WeatherDataService:
             List of weather events
         """
         try:
-            return await self.tomorrow_io.get_severe_weather_events(
-                latitude, longitude, start_date, end_date, radius_km
-            )
-            
+            if self.weather_provider == "noaa":
+                # Use NOAA as primary provider
+                return await self.noaa_service.get_weather_events(latitude, longitude, start_date, end_date, radius_km)
+            elif self.weather_provider == "tomorrow_io":
+                # Use Tomorrow.io as primary provider with NOAA fallback
+                try:
+                    return await self.tomorrow_io.get_severe_weather_events(
+                        latitude, longitude, start_date, end_date, radius_km
+                    )
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io weather events failed for {latitude}, {longitude}, using NOAA backup: {e}")
+                    return await self.noaa_service.get_weather_events(latitude, longitude, start_date, end_date, radius_km)
+            elif self.weather_provider == "auto":
+                # Auto-select: try Tomorrow.io first, fallback to NOAA
+                try:
+                    return await self.tomorrow_io.get_severe_weather_events(
+                        latitude, longitude, start_date, end_date, radius_km
+                    )
+                except Exception as e:
+                    logger.info(f"Tomorrow.io weather events failed for {latitude}, {longitude}, using NOAA: {e}")
+                    return await self.noaa_service.get_weather_events(latitude, longitude, start_date, end_date, radius_km)
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching weather events for {latitude}, {longitude}: {e}")
             raise
@@ -213,13 +335,25 @@ class WeatherDataService:
             Hail probability forecast data
         """
         try:
-            return await self.tomorrow_io.get_hail_probability_forecast(
-                latitude, longitude, days
-            )
-            
+            if self.weather_provider == "noaa":
+                # NOAA doesn't have hail probability API, return empty data
+                logger.info(f"NOAA doesn't support hail probability forecasting for {latitude}, {longitude}")
+                return {"hail_probability": [], "source": "NOAA-NWS", "note": "Hail probability not available from NOAA"}
+            elif self.weather_provider in ["tomorrow_io", "auto"]:
+                # Use Tomorrow.io for hail probability
+                try:
+                    return await self.tomorrow_io.get_hail_probability_forecast(
+                        latitude, longitude, days
+                    )
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io hail probability failed for {latitude}, {longitude}: {e}")
+                    return {"hail_probability": [], "source": "Tomorrow.io", "note": "Hail probability unavailable"}
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching hail probability for {latitude}, {longitude}: {e}")
-            return {"hail_probability": [], "source": "Tomorrow.io"}
+            return {"hail_probability": [], "source": "Error", "note": "Hail probability unavailable"}
     
     async def get_fire_risk_assessment(
         self,
@@ -239,13 +373,25 @@ class WeatherDataService:
             Fire risk assessment data
         """
         try:
-            return await self.tomorrow_io.get_fire_risk_data(
-                latitude, longitude, days
-            )
-            
+            if self.weather_provider == "noaa":
+                # NOAA doesn't have fire risk API, return empty data
+                logger.info(f"NOAA doesn't support fire risk assessment for {latitude}, {longitude}")
+                return {"fire_index": [], "source": "NOAA-NWS", "note": "Fire risk assessment not available from NOAA"}
+            elif self.weather_provider in ["tomorrow_io", "auto"]:
+                # Use Tomorrow.io for fire risk
+                try:
+                    return await self.tomorrow_io.get_fire_risk_data(
+                        latitude, longitude, days
+                    )
+                except Exception as e:
+                    logger.warning(f"Tomorrow.io fire risk failed for {latitude}, {longitude}: {e}")
+                    return {"fire_index": [], "source": "Tomorrow.io", "note": "Fire risk assessment unavailable"}
+            else:
+                raise ValueError(f"Unknown weather provider: {self.weather_provider}")
+                
         except Exception as e:
             logger.error(f"Error fetching fire risk assessment for {latitude}, {longitude}: {e}")
-            return {"fire_index": [], "source": "Tomorrow.io"}
+            return {"fire_index": [], "source": "Error", "note": "Fire risk assessment unavailable"}
     
     def _convert_tomorrow_io_current_weather(self, weather_data: Dict[str, Any], location_name: Optional[str] = None) -> Dict[str, Any]:
         """Convert Tomorrow.io current weather format to expected format."""
