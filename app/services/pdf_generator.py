@@ -106,12 +106,6 @@ class PDFGenerator:
             # Create output file path
             output_path = self.temp_dir / f"{report_id}.pdf"
 
-            # Save HTML for debugging
-            html_debug_path = self.temp_dir / f"{report_id}.html"
-            with open(html_debug_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            logger.info(f"HTML saved for debugging: {html_debug_path}")
-
             # Configure font settings
             font_config = FontConfiguration()
 

@@ -27,6 +27,9 @@ class MapService:
     def _get_chrome_driver(self) -> webdriver.Chrome:
         """Initialize headless Chrome driver for rendering."""
         try:
+            import os
+            import shutil
+
             chrome_options = Options()
             chrome_options.add_argument('--headless')
             chrome_options.add_argument('--no-sandbox')
@@ -34,11 +37,53 @@ class MapService:
             chrome_options.add_argument('--disable-gpu')
             chrome_options.add_argument('--window-size=1200,800')
 
-            service = Service(ChromeDriverManager().install())
+            # Try to detect Chrome/Chromium binary location
+            chrome_bin_candidates = [
+                '/usr/bin/google-chrome-stable',
+                '/usr/bin/google-chrome',
+                '/usr/bin/chromium',
+                '/usr/bin/chromium-browser',
+                shutil.which('google-chrome-stable'),
+                shutil.which('google-chrome'),
+                shutil.which('chromium'),
+                shutil.which('chromium-browser'),
+            ]
+
+            chrome_binary = None
+            for candidate in chrome_bin_candidates:
+                if candidate and os.path.exists(candidate):
+                    chrome_binary = candidate
+                    logger.info(f"Found Chrome binary at: {chrome_binary}")
+                    break
+
+            if chrome_binary:
+                chrome_options.binary_location = chrome_binary
+
+            # Try to use system chromedriver first, fall back to webdriver-manager
+            chromedriver_candidates = [
+                '/usr/bin/chromedriver',
+                '/usr/local/bin/chromedriver',
+                shutil.which('chromedriver'),
+            ]
+
+            service = None
+            for candidate in chromedriver_candidates:
+                if candidate and os.path.exists(candidate):
+                    logger.info(f"Using system chromedriver at: {candidate}")
+                    service = Service(executable_path=candidate)
+                    break
+
+            if service is None:
+                logger.info("Using ChromeDriverManager to install chromedriver")
+                service = Service(ChromeDriverManager().install())
+
             driver = webdriver.Chrome(service=service, options=chrome_options)
+            logger.info("Chrome driver initialized successfully")
             return driver
         except Exception as e:
             logger.error(f"Error initializing Chrome driver: {str(e)}")
+            logger.error(f"Chrome binary locations checked: {chrome_bin_candidates}")
+            logger.error(f"ChromeDriver locations checked: {chromedriver_candidates}")
             raise
 
     def _render_map_to_image(

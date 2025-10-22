@@ -25,6 +25,17 @@ class WeatherThresholds:
     WIND_EXTREME = settings.wind_extreme_threshold  # 80 mph
     WIND_MODERATE = settings.wind_moderate_threshold  # 40 mph
 
+    # Hail probability thresholds (percentage)
+    HAIL_PROBABILITY_HIGH = 60.0  # High risk threshold
+    HAIL_PROBABILITY_MODERATE = 30.0  # Moderate risk threshold
+    HAIL_PROBABILITY_LOW = 10.0  # Low risk threshold
+
+    # Fire index thresholds (0-100 scale)
+    FIRE_INDEX_EXTREME = 80.0  # Extreme fire danger
+    FIRE_INDEX_HIGH = 60.0  # High fire danger
+    FIRE_INDEX_MODERATE = 40.0  # Moderate fire danger
+    FIRE_INDEX_LOW = 20.0  # Low fire danger
+
     # Hail size descriptors and their corresponding sizes
     HAIL_SIZE_DESCRIPTORS: Dict[str, float] = {
         "pea": 0.25,
@@ -122,6 +133,48 @@ class WeatherThresholds:
             return "minor"
 
     @classmethod
+    def classify_hail_probability(cls, probability_percent: float) -> str:
+        """
+        Classify hail probability risk level.
+
+        Args:
+            probability_percent: Hail probability percentage (0-100)
+
+        Returns:
+            Risk classification: high, moderate, low, or minimal
+        """
+        if probability_percent >= cls.HAIL_PROBABILITY_HIGH:
+            return "high"
+        elif probability_percent >= cls.HAIL_PROBABILITY_MODERATE:
+            return "moderate"
+        elif probability_percent >= cls.HAIL_PROBABILITY_LOW:
+            return "low"
+        else:
+            return "minimal"
+
+    @classmethod
+    def classify_fire_index(cls, fire_index: float) -> str:
+        """
+        Classify fire danger index level.
+
+        Args:
+            fire_index: Fire index value (0-100)
+
+        Returns:
+            Fire danger classification: extreme, high, moderate, low, or minimal
+        """
+        if fire_index >= cls.FIRE_INDEX_EXTREME:
+            return "extreme"
+        elif fire_index >= cls.FIRE_INDEX_HIGH:
+            return "high"
+        elif fire_index >= cls.FIRE_INDEX_MODERATE:
+            return "moderate"
+        elif fire_index >= cls.FIRE_INDEX_LOW:
+            return "low"
+        else:
+            return "minimal"
+
+    @classmethod
     def is_hail_actionable(cls, size_inches: float) -> bool:
         """Check if hail size is actionable for business purposes."""
         return size_inches >= cls.HAIL_MIN_ACTIONABLE
@@ -130,6 +183,16 @@ class WeatherThresholds:
     def is_wind_actionable(cls, speed_mph: float) -> bool:
         """Check if wind speed is actionable for business purposes."""
         return speed_mph >= cls.WIND_MIN_ACTIONABLE
+
+    @classmethod
+    def is_hail_probability_actionable(cls, probability_percent: float) -> bool:
+        """Check if hail probability is actionable for business purposes."""
+        return probability_percent >= cls.HAIL_PROBABILITY_MODERATE
+
+    @classmethod
+    def is_fire_index_actionable(cls, fire_index: float) -> bool:
+        """Check if fire index is actionable for business purposes."""
+        return fire_index >= cls.FIRE_INDEX_MODERATE
 
     @classmethod
     def get_hail_descriptor(cls, size_inches: float) -> str:
@@ -217,7 +280,12 @@ class WeatherThresholds:
 
     @classmethod
     def calculate_business_impact_score(
-        cls, hail_size: float = 0, wind_speed: float = 0, tornado: bool = False
+        cls, 
+        hail_size: float = 0, 
+        wind_speed: float = 0, 
+        tornado: bool = False,
+        hail_probability: float = 0,
+        fire_index: float = 0
     ) -> int:
         """
         Calculate business impact score based on weather conditions.
@@ -226,6 +294,8 @@ class WeatherThresholds:
             hail_size: Hail size in inches
             wind_speed: Wind speed in mph
             tornado: Whether tornado is present
+            hail_probability: Hail probability percentage (0-100)
+            fire_index: Fire danger index (0-100)
 
         Returns:
             Business impact score (0-100+)
@@ -263,6 +333,24 @@ class WeatherThresholds:
         # Tornado impact (highest)
         if tornado:
             score += 80
+
+        # Hail probability impact (probabilistic risk)
+        if hail_probability >= cls.HAIL_PROBABILITY_HIGH:
+            score += 20  # High probability adds significant risk
+        elif hail_probability >= cls.HAIL_PROBABILITY_MODERATE:
+            score += 10  # Moderate probability adds some risk
+        elif hail_probability >= cls.HAIL_PROBABILITY_LOW:
+            score += 5   # Low probability adds minimal risk
+
+        # Fire index impact (fire danger)
+        if fire_index >= cls.FIRE_INDEX_EXTREME:
+            score += 25  # Extreme fire danger
+        elif fire_index >= cls.FIRE_INDEX_HIGH:
+            score += 15  # High fire danger
+        elif fire_index >= cls.FIRE_INDEX_MODERATE:
+            score += 10  # Moderate fire danger
+        elif fire_index >= cls.FIRE_INDEX_LOW:
+            score += 5   # Low fire danger
 
         # Apply severity multiplier
         if hail_size >= cls.HAIL_EXTREME or wind_speed >= cls.WIND_EXTREME or tornado:

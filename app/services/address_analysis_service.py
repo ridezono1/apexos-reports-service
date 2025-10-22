@@ -120,6 +120,60 @@ class AddressAnalysisService:
         except Exception as e:
             logger.error(f"Error in property address analysis: {e}")
             raise
+
+    @staticmethod
+    def _get_event_field(event: Dict[str, Any], *keys: str) -> Optional[str]:
+        """Return the first non-empty field value from the event."""
+        for key in keys:
+            value = event.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return None
+
+    def _get_event_type(self, event: Dict[str, Any]) -> str:
+        """Return normalized event type (lowercase)."""
+        value = self._get_event_field(event, "event", "event_type", "eventType", "type")
+        return value.lower() if value else ""
+
+    def _get_event_type_display(self, event: Dict[str, Any]) -> str:
+        """Return event type formatted for display."""
+        value = self._get_event_field(event, "event", "event_type", "eventType", "type")
+        return value.title() if value else "Unknown"
+
+    def _get_event_severity(self, event: Dict[str, Any]) -> str:
+        """Return normalized severity (lowercase)."""
+        value = self._get_event_field(event, "severity", "severity_level", "severityType")
+        return value.lower() if value else ""
+
+    def _get_event_severity_display(self, event: Dict[str, Any]) -> str:
+        """Return severity formatted for display."""
+        value = self._get_event_field(event, "severity", "severity_level", "severityType")
+        return value.title() if value else "Unknown"
+
+    def _get_event_start(self, event: Dict[str, Any]) -> str:
+        """Return the best available start timestamp for the event."""
+        value = self._get_event_field(
+            event,
+            "date",
+            "timestamp",
+            "start_time",
+            "startTime",
+            "begin_date",
+            "beginDate",
+            "BEGIN_DATE_TIME"
+        )
+        return value if value else "Unknown"
+
+    def _get_event_end(self, event: Dict[str, Any]) -> Optional[str]:
+        """Return the best available end timestamp for the event."""
+        return self._get_event_field(
+            event,
+            "end_time",
+            "endTime",
+            "end_date",
+            "endDate",
+            "END_DATE_TIME"
+        )
     
     async def _fetch_property_weather_data(
         self,
@@ -132,15 +186,25 @@ class AddressAnalysisService:
         try:
             start_date = datetime.fromisoformat(analysis_period["start"])
             end_date = datetime.fromisoformat(analysis_period["end"])
-            
+
+            # IMPORTANT: Always fetch 24 months of severe weather events for address reports
+            # This provides comprehensive storm history regardless of selected analysis period
+            severe_weather_start = end_date - timedelta(days=730)  # 24 months = ~730 days
+
+            logger.info(f"Fetching weather data for address report:")
+            logger.info(f"  - Analysis period: {start_date.date()} to {end_date.date()}")
+            logger.info(f"  - Severe weather events period: {severe_weather_start.date()} to {end_date.date()} (24 months)")
+
             # Fetch all weather data types
             current_weather = await self.weather_service.get_current_weather(latitude, longitude)
             forecast = await self.weather_service.get_weather_forecast(latitude, longitude, days=7)
             historical_weather = await self.weather_service.get_historical_weather(
                 latitude, longitude, start_date.date(), end_date.date()
             )
+
+            # Always fetch 24 months of severe weather events (tornadoes, hurricanes, hail, strong winds, etc.)
             weather_events = await self.weather_service.get_weather_events(
-                latitude, longitude, start_date.date(), end_date.date()
+                latitude, longitude, severe_weather_start.date(), end_date.date(), radius_km=50.0
             )
             
             # Calculate property-specific weather summary
@@ -172,8 +236,8 @@ class AddressAnalysisService:
         # Calculate weather metrics for the summary table
         max_wind_speed = self._get_max_wind_speed(weather_events, historical_weather)
         total_events = len(weather_events)
-        severe_events = len([e for e in weather_events if e.get("severity") in ["Severe", "severe", "SEVERE"]])
-        hail_events = len([e for e in weather_events if e.get("event", "").lower() in ["hail", "hailstorm"]])
+        severe_events = len([e for e in weather_events if self._get_event_severity(e) in {"severe", "extreme"}])
+        hail_events = len([e for e in weather_events if "hail" in self._get_event_type(e)])
         max_hail_size = self._get_max_hail_size(weather_events)
         temp_range = self._get_temperature_range_from_historical(historical_weather)
         
@@ -200,7 +264,9 @@ class AddressAnalysisService:
             "weather_events_summary": {
                 "total_events": total_events,
                 "severe_events": severe_events,
-                "event_types": list(set(e.get("event", "") for e in weather_events))
+                "event_types": sorted({
+                    self._get_event_type_display(event) for event in weather_events
+                })
             },
             # New fields for the weather summary table
             "max_wind_speed": max_wind_speed,
@@ -220,15 +286,22 @@ class AddressAnalysisService:
 
         # Check NOAA storm events for wind data
         for event in weather_events:
-            event_type = event.get("event", "").lower()
+            event_type = self._get_event_type(event)
             if "wind" in event_type or "thunderstorm" in event_type:
-                # NOAA storm events use 'magnitude' field for wind speed in mph
-                magnitude = event.get("magnitude", 0)
+                magnitude_value = event.get("magnitude") or event.get("magnitude_value")
                 try:
-                    wind_speed = float(magnitude) if magnitude else 0
-                    max_wind = max(max_wind, wind_speed)
+                    wind_speed = float(magnitude_value) if magnitude_value not in (None, "") else 0
                 except (ValueError, TypeError):
-                    continue
+                    wind_speed = 0
+
+                if wind_speed == 0:
+                    severity_level = self._get_event_severity(event)
+                    if severity_level == "extreme":
+                        wind_speed = WIND_EXTREME
+                    elif severity_level == "severe":
+                        wind_speed = WIND_SEVERE
+
+                max_wind = max(max_wind, wind_speed)
 
         # Check historical weather observations for wind data
         observations = historical_weather.get("observations", [])
@@ -246,14 +319,23 @@ class AddressAnalysisService:
         max_hail = 0.0
 
         for event in weather_events:
-            if "hail" in event.get("event", "").lower():
-                # NOAA storm events use 'magnitude' field for hail size in inches
-                magnitude = event.get("magnitude", 0)
+            if "hail" in self._get_event_type(event):
+                magnitude_value = event.get("magnitude") or event.get("magnitude_value")
                 try:
-                    hail_size = float(magnitude) if magnitude else 0
-                    max_hail = max(max_hail, hail_size)
+                    hail_size = float(magnitude_value) if magnitude_value not in (None, "") else 0
                 except (ValueError, TypeError):
-                    continue
+                    hail_size = 0
+
+                if hail_size == 0:
+                    severity_level = self._get_event_severity(event)
+                    if severity_level == "extreme":
+                        hail_size = HAIL_EXTREME
+                    elif severity_level == "severe":
+                        hail_size = HAIL_SEVERE
+                    elif severity_level == "moderate":
+                        hail_size = max(hail_size, HAIL_MODERATE)
+
+                max_hail = max(max_hail, hail_size)
 
         return max_hail
     
@@ -309,14 +391,21 @@ class AddressAnalysisService:
         severe_events = []
 
         for event in weather_events:
-            event_type = event.get("event", "").lower()
-            magnitude = event.get("magnitude", "")
-            magnitude_type = event.get("magnitude_type", "")
-            severity = event.get("severity", "Unknown")
+            event_type = self._get_event_type(event)
+            if not event_type:
+                continue
 
-            # Parse magnitude as float
+            magnitude_raw = self._get_event_field(
+                event, "magnitude", "magnitude_value", "mag", "value"
+            )
+            magnitude_type = self._get_event_field(
+                event, "magnitude_type", "magnitudeType", "magnitude_unit"
+            ) or ""
+            severity_value = self._get_event_severity(event)
+            severity = severity_value.title() if severity_value else "Unknown"
+
             try:
-                mag_value = float(magnitude) if magnitude else 0
+                mag_value = float(magnitude_raw) if magnitude_raw else 0
             except (ValueError, TypeError):
                 mag_value = 0
 
@@ -326,30 +415,40 @@ class AddressAnalysisService:
 
             # HAIL THRESHOLD: ≥1 inch
             if "hail" in event_type:
-                if mag_value >= HAIL_MIN_ACTIONABLE:  # ≥1 inch
+                if mag_value >= HAIL_MIN_ACTIONABLE or severity_value in {"moderate", "severe", "extreme"}:
                     is_actionable = True
-                    if mag_value >= HAIL_EXTREME:  # ≥2 inches
+                    if mag_value >= HAIL_EXTREME or severity_value == "extreme":
                         algorithm_magnitude = "Extreme"
                         severity = "Severe"
-                    elif mag_value >= HAIL_SEVERE:  # ≥1 inch
+                        if mag_value == 0:
+                            mag_value = HAIL_EXTREME
+                    elif mag_value >= HAIL_SEVERE or severity_value == "severe":
                         algorithm_magnitude = "Severe"
                         severity = "Severe"
-                    elif mag_value >= HAIL_MODERATE:  # ≥0.5 inch
+                        if mag_value == 0:
+                            mag_value = HAIL_SEVERE
+                    elif mag_value >= HAIL_MODERATE or severity_value == "moderate":
                         algorithm_magnitude = "Moderate"
+                        if mag_value == 0:
+                            mag_value = HAIL_MODERATE
                     else:
                         algorithm_magnitude = "Minor"
 
             # WIND THRESHOLD: ≥60 mph (damaging winds)
             elif "wind" in event_type or "thunderstorm" in event_type:
-                if mag_value >= WIND_MIN_ACTIONABLE:  # ≥60 mph
+                if mag_value >= WIND_MIN_ACTIONABLE or severity_value in {"severe", "extreme"}:
                     is_actionable = True
-                    if mag_value >= WIND_EXTREME:  # ≥80 mph
+                    if mag_value >= WIND_EXTREME or severity_value == "extreme":
                         algorithm_magnitude = "Extreme"
                         severity = "Severe"
-                    elif mag_value >= WIND_SEVERE:  # ≥60 mph
+                        if mag_value == 0:
+                            mag_value = WIND_EXTREME
+                    elif mag_value >= WIND_SEVERE or severity_value == "severe":
                         algorithm_magnitude = "Severe"
                         severity = "Severe"
-                    elif mag_value >= WIND_MODERATE:  # ≥40 mph
+                        if mag_value == 0:
+                            mag_value = WIND_SEVERE
+                    elif mag_value >= WIND_MODERATE:
                         algorithm_magnitude = "Moderate"
                     else:
                         algorithm_magnitude = "Minor"
@@ -358,35 +457,153 @@ class AddressAnalysisService:
             elif "tornado" in event_type:
                 is_actionable = True
                 # Use EF rating from magnitude_type if available
-                ef_rating = magnitude_type if "EF" in magnitude_type else f"EF{int(mag_value)}" if mag_value > 0 else "EF0"
+                magnitude_type_upper = magnitude_type.upper()
+                ef_rating = magnitude_type_upper if "EF" in magnitude_type_upper else f"EF{int(mag_value)}" if mag_value > 0 else "EF0"
 
-                if mag_value >= 4:  # EF4-EF5: Violent
+                if mag_value >= 4:
                     algorithm_magnitude = f"Violent ({ef_rating})"
                     severity = "Severe"
-                elif mag_value >= 2:  # EF2-EF3: Strong
+                elif mag_value >= 2:
                     algorithm_magnitude = f"Strong ({ef_rating})"
                     severity = "Severe"
-                else:  # EF0-EF1: Weak
+                else:
                     algorithm_magnitude = f"Weak ({ef_rating})"
+                    severity = "Moderate"
+
+            # TROPICAL STORMS & HURRICANES: All included (Category 1-5)
+            elif "tropical" in event_type or "hurricane" in event_type or "cyclone" in event_type:
+                is_actionable = True
+                # Category based on wind speed or explicit category
+                magnitude_type_lower = magnitude_type.lower()
+                if "category" in magnitude_type_lower:
+                    algorithm_magnitude = magnitude_type
+                    severity = "Severe" if mag_value >= 3 else "Moderate"
+                else:
+                    # Estimate category from wind speed
+                    if mag_value >= 157:  # Cat 5: ≥157 mph
+                        algorithm_magnitude = "Category 5"
+                        severity = "Severe"
+                    elif mag_value >= 130:  # Cat 4: 130-156 mph
+                        algorithm_magnitude = "Category 4"
+                        severity = "Severe"
+                    elif mag_value >= 111:  # Cat 3: 111-129 mph
+                        algorithm_magnitude = "Category 3"
+                        severity = "Severe"
+                    elif mag_value >= 96:  # Cat 2: 96-110 mph
+                        algorithm_magnitude = "Category 2"
+                        severity = "Moderate"
+                    elif mag_value >= 74:  # Cat 1: 74-95 mph
+                        algorithm_magnitude = "Category 1"
+                        severity = "Moderate"
+                    else:  # Tropical Storm: 39-73 mph
+                        algorithm_magnitude = "Tropical Storm"
+                        severity = "Moderate"
+
+            # FLOOD EVENTS: All included
+            elif "flood" in event_type:
+                is_actionable = True
+                if "flash" in event_type or mag_value > 3:
+                    algorithm_magnitude = "Major Flooding"
+                    severity = "Severe"
+                elif mag_value > 1:
+                    algorithm_magnitude = "Moderate Flooding"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Minor Flooding"
+                    severity = "Moderate"
+
+            # WINTER STORM EVENTS: All included
+            elif "winter" in event_type or "blizzard" in event_type or "ice" in event_type:
+                is_actionable = True
+                if "blizzard" in event_type.lower() or mag_value > 12:  # Blizzard or heavy snow
+                    algorithm_magnitude = "Severe Winter Storm"
+                    severity = "Severe"
+                elif mag_value > 6:
+                    algorithm_magnitude = "Moderate Winter Storm"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Winter Storm"
+                    severity = "Moderate"
+
+            # FIRE WEATHER EVENTS: High risk events included
+            elif "fire" in event_type:
+                if mag_value >= 50 or severity_value in {"severe", "extreme"}:
+                    is_actionable = True
+                    if mag_value >= 75:
+                        algorithm_magnitude = "Extreme Fire Risk"
+                        severity = "Severe"
+                    else:
+                        algorithm_magnitude = "High Fire Risk"
+                        severity = "Moderate"
+
+            # NOAA WEATHER EVENTS: Include all weather events from NOAA
+            elif "precipitation" in event_type or "rain" in event_type:
+                is_actionable = True
+                if mag_value >= 50:  # Heavy precipitation (≥50mm)
+                    algorithm_magnitude = "Heavy Precipitation"
+                    severity = "Severe"
+                elif mag_value >= 25:  # Moderate precipitation (≥25mm)
+                    algorithm_magnitude = "Moderate Precipitation"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Precipitation"
+                    severity = "Moderate"
+
+            elif "heat" in event_type:
+                is_actionable = True
+                if mag_value >= 35:  # Very hot (≥35°C / 95°F)
+                    algorithm_magnitude = "Extreme Heat"
+                    severity = "Severe"
+                elif mag_value >= 30:  # Hot (≥30°C / 86°F)
+                    algorithm_magnitude = "High Temperature"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Elevated Temperature"
+                    severity = "Moderate"
+
+            elif "cold" in event_type:
+                is_actionable = True
+                if mag_value <= -10:  # Very cold (≤-10°C / 14°F)
+                    algorithm_magnitude = "Extreme Cold"
+                    severity = "Severe"
+                elif mag_value <= 0:  # Freezing (≤0°C / 32°F)
+                    algorithm_magnitude = "Freezing Temperature"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Low Temperature"
+                    severity = "Moderate"
+
+            elif "winter" in event_type or "snow" in event_type:
+                is_actionable = True
+                if mag_value >= 100:  # Heavy snow (≥100mm)
+                    algorithm_magnitude = "Heavy Snow"
+                    severity = "Severe"
+                elif mag_value >= 25:  # Moderate snow (≥25mm)
+                    algorithm_magnitude = "Moderate Snow"
+                    severity = "Moderate"
+                else:
+                    algorithm_magnitude = "Light Snow"
                     severity = "Moderate"
 
             # Only include events that meet business thresholds
             if is_actionable:
                 # Format date to match HailTrace style (e.g., "August 18, 2025")
-                date_str = event.get("date", "Unknown")
+                date_str = self._get_event_start(event)
                 date_formatted = date_str
                 if date_str != "Unknown":
                     try:
-                        from datetime import datetime
-                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        if "T" in date_str:
+                            date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        else:
+                            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                         date_formatted = date_obj.strftime("%B %d, %Y")
-                    except:
+                    except Exception:
                         date_formatted = date_str
 
                 formatted_event = {
                     "date": date_str,  # Keep original for sorting
                     "date_formatted": date_formatted,  # Human-readable format
-                    "type": event.get("event", "Unknown").title(),
+                    "type": self._get_event_type_display(event),
                     "duration": self._calculate_event_duration(event),
                     "severity": severity,
                     "magnitude": self._format_magnitude(event_type, mag_value, magnitude_type),
@@ -402,25 +619,49 @@ class AddressAnalysisService:
     def _calculate_event_duration(self, event: Dict[str, Any]) -> str:
         """Calculate event duration from begin and end times."""
         try:
-            begin_date = event.get("begin_date")
-            end_date = event.get("end_date")
+            begin_raw = self._get_event_field(
+                event,
+                "begin_date",
+                "beginDate",
+                "BEGIN_DATE_TIME",
+                "start_time",
+                "startTime",
+                "timestamp"
+            )
+            end_raw = self._get_event_field(
+                event,
+                "end_date",
+                "endDate",
+                "END_DATE_TIME",
+                "end_time",
+                "endTime"
+            )
 
-            if begin_date and end_date:
-                # Parse dates and calculate duration
-                from datetime import datetime
-                begin = datetime.fromisoformat(begin_date)
-                end = datetime.fromisoformat(end_date)
-                duration = (end - begin).total_seconds() / 60  # minutes
+            def _parse(value: str) -> Optional[datetime]:
+                try:
+                    if "T" in value:
+                        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    try:
+                        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        return datetime.strptime(value, "%Y-%m-%d")
+                except Exception:
+                    return None
 
-                if duration < 60:
-                    return f"{int(duration)} min"
-                else:
+            if begin_raw and end_raw:
+                begin = _parse(begin_raw)
+                end = _parse(end_raw)
+                if begin and end:
+                    duration = (end - begin).total_seconds() / 60  # minutes
+
+                    if duration < 60:
+                        return f"{int(duration)} min"
                     hours = int(duration / 60)
                     minutes = int(duration % 60)
                     return f"{hours}h {minutes}m" if minutes > 0 else f"{hours}h"
 
             # Default duration estimates
-            event_type = event.get("event", "").lower()
+            event_type = self._get_event_type(event)
             if "tornado" in event_type:
                 return "~15 min"
             elif "hail" in event_type:
@@ -537,7 +778,7 @@ class AddressAnalysisService:
     
     def _assess_hail_risk(self, weather_events: List[Dict[str, Any]], historical_weather: Dict[str, Any]) -> Dict[str, Any]:
         """Assess hail damage risk for the property."""
-        hail_events = [e for e in weather_events if "hail" in e.get("event", "").lower()]
+        hail_events = [e for e in weather_events if "hail" in self._get_event_type(e)]
         
         risk_score = 0
         risk_factors = []
@@ -546,7 +787,7 @@ class AddressAnalysisService:
             risk_score += 0.6
             risk_factors.append(f"{len(hail_events)} hail events detected")
             
-            severe_hail = [e for e in hail_events if e.get("severity") == "Severe"]
+            severe_hail = [e for e in hail_events if self._get_event_severity(e) in {"severe", "extreme"}]
             if severe_hail:
                 risk_score += 0.3
                 risk_factors.append(f"{len(severe_hail)} severe hail events")
@@ -567,7 +808,7 @@ class AddressAnalysisService:
     
     def _assess_wind_risk(self, weather_events: List[Dict[str, Any]], historical_weather: Dict[str, Any], current_weather: Dict[str, Any]) -> Dict[str, Any]:
         """Assess wind damage risk for the property."""
-        wind_events = [e for e in weather_events if "wind" in e.get("event", "").lower()]
+        wind_events = [e for e in weather_events if "wind" in self._get_event_type(e)]
         
         risk_score = 0
         risk_factors = []
@@ -576,7 +817,7 @@ class AddressAnalysisService:
             risk_score += 0.5
             risk_factors.append(f"{len(wind_events)} wind events detected")
             
-            severe_wind = [e for e in wind_events if e.get("severity") == "Severe"]
+            severe_wind = [e for e in wind_events if self._get_event_severity(e) in {"severe", "extreme"}]
             if severe_wind:
                 risk_score += 0.3
                 risk_factors.append(f"{len(severe_wind)} severe wind events")
@@ -649,7 +890,7 @@ class AddressAnalysisService:
     
     def _assess_tornado_risk(self, weather_events: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Assess tornado risk for the property."""
-        tornado_events = [e for e in weather_events if "tornado" in e.get("event", "").lower()]
+        tornado_events = [e for e in weather_events if "tornado" in self._get_event_type(e)]
         
         risk_score = 0
         risk_factors = []
@@ -658,7 +899,7 @@ class AddressAnalysisService:
             risk_score += 0.8
             risk_factors.append(f"{len(tornado_events)} tornado events detected")
             
-            severe_tornado = [e for e in tornado_events if e.get("severity") == "Severe"]
+            severe_tornado = [e for e in tornado_events if self._get_event_severity(e) in {"severe", "extreme"}]
             if severe_tornado:
                 risk_score += 0.2
                 risk_factors.append(f"{len(severe_tornado)} severe tornado events")
@@ -786,7 +1027,7 @@ class AddressAnalysisService:
         
         events_by_type = {}
         for event in weather_events:
-            event_type = event.get("event", "unknown")
+            event_type = self._get_event_type_display(event)
             events_by_type[event_type] = events_by_type.get(event_type, 0) + 1
         
         total_events = len(weather_events)
@@ -826,13 +1067,15 @@ class AddressAnalysisService:
                 impact_factors.append("Moderate weather risk property")
             
             # Severe weather events indicate immediate business impact
-            severe_events = len([e for e in weather_events if e.get("severity") == "Severe"])
+            severe_events = len([e for e in weather_events if self._get_event_severity(e) in {"severe", "extreme"}])
             if severe_events > 0:
                 impact_score += 0.3
                 impact_factors.append(f"{severe_events} severe weather events")
             
             # Multiple event types indicate complex weather patterns
-            unique_events = len(set(e.get("event", "") for e in weather_events))
+            unique_events = len({
+                self._get_event_type_display(e) for e in weather_events if self._get_event_type(e)
+            })
             if unique_events > 2:
                 impact_score += 0.2
                 impact_factors.append("Multiple weather event types")

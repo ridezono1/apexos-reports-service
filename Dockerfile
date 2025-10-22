@@ -39,17 +39,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     gnupg \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome for Selenium map rendering (supports both AMD64 and ARM64)
+# Install Chrome and ChromeDriver for Selenium map rendering (supports both AMD64 and ARM64)
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
+        # Install Google Chrome
         wget -q -O /tmp/google-chrome-key.pub https://dl-ssl.google.com/linux/linux_signing_key.pub && \
         gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg /tmp/google-chrome-key.pub && \
         rm /tmp/google-chrome-key.pub && \
         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
         apt-get update && \
-        apt-get install -y --no-install-recommends google-chrome-stable; \
+        apt-get install -y --no-install-recommends google-chrome-stable && \
+        # Install ChromeDriver (must match Chrome version)
+        CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+') && \
+        CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d. -f1) && \
+        echo "Chrome version: $CHROME_VERSION (major: $CHROME_MAJOR_VERSION)" && \
+        # Download matching ChromeDriver version
+        CHROMEDRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$CHROME_MAJOR_VERSION") && \
+        echo "ChromeDriver version: $CHROMEDRIVER_VERSION" && \
+        wget -q "https://storage.googleapis.com/chrome-for-testing-public/$CHROMEDRIVER_VERSION/linux64/chromedriver-linux64.zip" && \
+        unzip chromedriver-linux64.zip && \
+        mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
+        chmod +x /usr/local/bin/chromedriver && \
+        rm -rf chromedriver-linux64* && \
+        echo "ChromeDriver installed at /usr/local/bin/chromedriver"; \
     elif [ "$ARCH" = "arm64" ]; then \
         # For ARM64, use Chromium instead of Chrome (Chrome doesn't have ARM64 packages)
         apt-get update && \
