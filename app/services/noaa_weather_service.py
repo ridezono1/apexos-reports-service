@@ -10,6 +10,7 @@ from datetime import datetime, date, timedelta
 import logging
 import sentry_sdk
 from urllib.parse import urlencode
+import math
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -294,13 +295,16 @@ class NOAAWeatherService:
             events = []
             
             # Calculate bounding box for the search area
-            lat_offset = radius_km / 111.0  # Rough conversion km to degrees
-            lon_offset = radius_km / (111.0 * abs(latitude / 90.0))  # Adjust for latitude
-            
-            min_lat = latitude - lat_offset
-            max_lat = latitude + lat_offset
-            min_lon = longitude - lon_offset
-            max_lon = longitude + lon_offset
+            lat_offset = radius_km / 111.0  # Rough conversion km to degrees latitude
+            cos_lat = math.cos(math.radians(latitude))
+            if abs(cos_lat) < 0.001:
+                cos_lat = 0.001  # Avoid division by zero near the poles
+            lon_offset = radius_km / (111.320 * cos_lat)
+
+            min_lat = max(-90.0, latitude - lat_offset)
+            max_lat = min(90.0, latitude + lat_offset)
+            min_lon = max(-180.0, longitude - lon_offset)
+            max_lon = min(180.0, longitude + lon_offset)
             
             # Try multiple severe weather datasets
             # Note: NEXRAD2, NEXRAD3, and SWDI may require different parameters or be restricted
@@ -329,30 +333,23 @@ class NOAAWeatherService:
                             end_date
                         )
                         
-                        # Use different parameters based on dataset
+                        params = {
+                            "datasetid": dataset_id,
+                            "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",
+                            "startdate": current_start.isoformat(),
+                            "enddate": chunk_end.isoformat(),
+                            "limit": 1000,
+                            "includemetadata": "false"
+                        }
+
                         if dataset_id == "GHCND":
-                            # For GHCND, use location-based queries with Texas FIPS code
-                            # This is more reliable than extent-based queries
-                            params = {
-                                "datasetid": dataset_id,
-                                "locationid": "FIPS:48",  # Texas FIPS code
-                                "startdate": current_start.isoformat(),
-                                "enddate": chunk_end.isoformat(),
-                                "limit": 1000,
-                                "includemetadata": "false",
-                                # Focus on severe weather datatypes
-                                "datatypeid": "PRCP,TMAX,TMIN,SNOW,SNWD,WSFG,WSF1,WSF2,WSF5,WSF6,WSF7,WSF8,WSF9,WSFA,WSFB,WSFC,WSFD,WSFE,WSFF,WSFG,WSFH,WSFI,WSFJ,WSFK,WSFL,WSFM,WSFN,WSFO,WSFP,WSFQ,WSFR,WSFS,WSFT,WSFU,WSFV,WSFW,WSFX,WSFY,WSFZ"
-                            }
-                        else:
-                            # For other datasets, use extent parameter
-                            params = {
-                                "datasetid": dataset_id,
-                                "extent": f"{min_lat},{min_lon},{max_lat},{max_lon}",
-                                "startdate": current_start.isoformat(),
-                                "enddate": chunk_end.isoformat(),
-                                "limit": 1000,
-                                "includemetadata": "false"
-                            }
+                            # Focus on severe weather datatypes for daily summaries
+                            params["datatypeid"] = (
+                                "PRCP,TMAX,TMIN,SNOW,SNWD,WSFG,WSF1,WSF2,WSF5,WSF6,WSF7,"
+                                "WSF8,WSF9,WSFA,WSFB,WSFC,WSFD,WSFE,WSFF,WSFG,WSFH,WSFI,"
+                                "WSFJ,WSFK,WSFL,WSFM,WSFN,WSFO,WSFP,WSFQ,WSFR,WSFS,WSFT,"
+                                "WSFU,WSFV,WSFW,WSFX,WSFY,WSFZ"
+                            )
                         
                         logger.debug(f"Fetching {dataset_id} data for {current_start} to {chunk_end}")
                         
@@ -504,12 +501,6 @@ class NOAAWeatherService:
                         
                 current_year += 1
                 
-            # If we still don't have enough events, create some realistic Houston-area severe weather events
-            if len(events) < 5:
-                logger.info("Creating realistic Houston-area severe weather events for demonstration")
-                houston_events = self._create_realistic_houston_weather_events(start_date, end_date)
-                events.extend(houston_events)
-                
             logger.info(f"Fetched {len(events)} events from NWS Storm Events Database")
             return events
             
@@ -570,136 +561,6 @@ class NOAAWeatherService:
         except Exception as e:
             logger.error(f"Error converting storm event record: {e}")
             return None
-    
-    def _create_realistic_houston_weather_events(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
-        """Create realistic Houston-area severe weather events for demonstration purposes."""
-        events = []
-        
-        # Houston area coordinates
-        houston_lat = 29.7604
-        houston_lon = -95.3698
-        
-        # Generate realistic severe weather events based on Houston's climate
-        # These are based on actual weather patterns and historical data
-        
-        # Hurricane/Tropical Storm events (common in Houston)
-        hurricane_dates = [
-            "2024-08-15",  # Hurricane season peak
-            "2023-09-12",  # Late hurricane season
-        ]
-        
-        for date_str in hurricane_dates:
-            event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= event_date <= end_date:
-                events.append({
-                    "event_type": "hurricane",
-                    "severity": "severe",
-                    "urgency": "immediate",
-                    "description": "Hurricane/Tropical Storm event (Category 1-2)",
-                    "timestamp": date_str,
-                    "source": "NWS-StormEvents-Simulated",
-                    "magnitude": 85.0,  # Wind speed in mph
-                    "magnitude_type": "mph",
-                    "location": "Houston Area",
-                    "state": "TX",
-                    "county": "Harris"
-                })
-        
-        # Severe Thunderstorm events
-        thunderstorm_dates = [
-            "2024-06-20",  # Summer thunderstorm season
-            "2024-07-15",  # Peak summer
-            "2023-11-08",  # Fall severe weather
-            "2024-04-25",  # Spring severe weather
-        ]
-        
-        for date_str in thunderstorm_dates:
-            event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= event_date <= end_date:
-                events.append({
-                    "event_type": "thunderstorm wind",
-                    "severity": "severe",
-                    "urgency": "immediate",
-                    "description": "Severe Thunderstorm Wind event (60+ mph)",
-                    "timestamp": date_str,
-                    "source": "NWS-StormEvents-Simulated",
-                    "magnitude": 65.0,  # Wind speed in mph
-                    "magnitude_type": "mph",
-                    "location": "Houston Area",
-                    "state": "TX",
-                    "county": "Harris"
-                })
-        
-        # Hail events
-        hail_dates = [
-            "2024-05-10",  # Spring hail season
-            "2023-12-15",  # Winter severe weather
-        ]
-        
-        for date_str in hail_dates:
-            event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= event_date <= end_date:
-                events.append({
-                    "event_type": "hail",
-                    "severity": "severe",
-                    "urgency": "immediate",
-                    "description": "Severe Hail event (1.0+ inches)",
-                    "timestamp": date_str,
-                    "source": "NWS-StormEvents-Simulated",
-                    "magnitude": 1.5,  # Hail size in inches
-                    "magnitude_type": "inches",
-                    "location": "Houston Area",
-                    "state": "TX",
-                    "county": "Harris"
-                })
-        
-        # Flash Flood events
-        flood_dates = [
-            "2024-09-03",  # Hurricane season flooding
-            "2023-10-22",  # Fall flooding
-        ]
-        
-        for date_str in flood_dates:
-            event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= event_date <= end_date:
-                events.append({
-                    "event_type": "flash flood",
-                    "severity": "severe",
-                    "urgency": "immediate",
-                    "description": "Flash Flood event",
-                    "timestamp": date_str,
-                    "source": "NWS-StormEvents-Simulated",
-                    "magnitude": 3.0,  # Flood severity level
-                    "magnitude_type": "level",
-                    "location": "Houston Area",
-                    "state": "TX",
-                    "county": "Harris"
-                })
-        
-        # Tornado events (less common but possible)
-        tornado_dates = [
-            "2024-03-15",  # Spring tornado season
-        ]
-        
-        for date_str in tornado_dates:
-            event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= event_date <= end_date:
-                events.append({
-                    "event_type": "tornado",
-                    "severity": "severe",
-                    "urgency": "immediate",
-                    "description": "Tornado event (EF1)",
-                    "timestamp": date_str,
-                    "source": "NWS-StormEvents-Simulated",
-                    "magnitude": 1.0,  # EF scale
-                    "magnitude_type": "EF",
-                    "location": "Houston Area",
-                    "state": "TX",
-                    "county": "Harris"
-                })
-        
-        logger.info(f"Created {len(events)} realistic Houston-area severe weather events")
-        return events
     
     async def _fetch_nws_current_alerts(
         self,
@@ -791,7 +652,7 @@ class NOAAWeatherService:
                 datatype = record.get("datatype", "")
                 value = record.get("value", 0)
                 
-                # Much more lenient thresholds to capture Houston-area weather events
+                # Use lenient thresholds to capture local severe weather indicators
                 if datatype == "PRCP" and value >= 10:  # Any precipitation (>=1mm)
                     event_type = "precipitation"
                     severity = "severe" if value >= 100 else "moderate" if value >= 50 else "light"
@@ -818,7 +679,7 @@ class NOAAWeatherService:
                     magnitude = value / 10.0  # Convert to mm
                     description = f"Snow depth event ({magnitude:.1f} mm)"
                 elif datatype in ["WSFG", "WSF1", "WSF2", "WSF5", "WSF6", "WSF7", "WSF8", "WSF9", "WSFA", "WSFB", "WSFC", "WSFD", "WSFE", "WSFF", "WSFG", "WSFH", "WSFI", "WSFJ", "WSFK", "WSFL", "WSFM", "WSFN", "WSFO", "WSFP", "WSFQ", "WSFR", "WSFS", "WSFT", "WSFU", "WSFV", "WSFW", "WSFX", "WSFY", "WSFZ"]:
-                    # Wind speed data - much lower thresholds for Houston
+                    # Wind speed data - use lower thresholds to capture damaging winds
                     wind_speed_mph = value * 0.621371  # Convert m/s to mph
                     if wind_speed_mph >= 20:  # Moderate wind (>=20 mph)
                         event_type = "wind"
