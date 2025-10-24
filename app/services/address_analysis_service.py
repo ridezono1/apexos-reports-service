@@ -395,13 +395,9 @@ class AddressAnalysisService:
             if not event_type:
                 continue
             
-            # Only include insurance-relevant events for roofing sales agents
-            # Skip heat events, cold events, and other non-roofing-relevant events
-            if hasattr(event, 'insurance_relevant') and not event.insurance_relevant:
-                continue
-            
-            # Also filter by event type for additional safety
-            if event_type in ['heat', 'cold', 'temperature']:
+            # Filter out only specific non-roofing-relevant event types
+            # Keep tornadoes, hurricanes, hail, wind, floods, winter storms, and fires
+            if event_type in ['heat', 'cold', 'temperature', 'drought', 'dust']:
                 continue
 
             magnitude_raw = self._get_event_field(
