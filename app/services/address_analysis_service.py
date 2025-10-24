@@ -121,8 +121,7 @@ class AddressAnalysisService:
             logger.error(f"Error in property address analysis: {e}")
             raise
 
-    @staticmethod
-    def _get_event_field(event: Dict[str, Any], *keys: str) -> Optional[str]:
+    def _get_event_field(self, event: Dict[str, Any], *keys: str) -> Optional[str]:
         """Return the first non-empty field value from the event."""
         for key in keys:
             value = event.get(key)
@@ -391,22 +390,14 @@ class AddressAnalysisService:
         severe_events = []
 
         for event in weather_events:
-            # DEBUG: Log the actual event structure
-            logger.info(f"DEBUG: Event structure: {event}")
-            logger.info(f"DEBUG: Event type: {type(event)}")
-            logger.info(f"DEBUG: Event attributes: {dir(event) if hasattr(event, '__dict__') else 'No __dict__'}")
-            
             event_type = self._get_event_type(event)
             if not event_type:
-                logger.warning(f"DEBUG: No event type found for event: {event}")
                 continue
             
-            logger.info(f"DEBUG: Processing event type: {event_type}")
-            
-            # TEMPORARILY DISABLE FILTERING TO DEBUG WHAT EVENTS ARE BEING RETURNED
-            # TODO: Re-enable filtering once we understand the event types
-            # if event_type in ['heat', 'cold', 'temperature', 'drought', 'dust']:
-            #     continue
+            # Filter out only specific non-roofing-relevant event types
+            # Keep tornadoes, hurricanes, hail, wind, floods, winter storms, and fires
+            if event_type in ['heat', 'cold', 'temperature', 'drought', 'dust']:
+                continue
 
             magnitude_raw = self._get_event_field(
                 event, "magnitude", "magnitude_value", "mag", "value"
