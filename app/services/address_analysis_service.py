@@ -202,9 +202,24 @@ class AddressAnalysisService:
             )
 
             # Always fetch 24 months of severe weather events (tornadoes, hurricanes, hail, strong winds, etc.)
+            logger.info(f"🔍 DEBUG: Calling weather_service.get_weather_events with:")
+            logger.info(f"  - latitude: {latitude}")
+            logger.info(f"  - longitude: {longitude}")
+            logger.info(f"  - start_date: {severe_weather_start.date()}")
+            logger.info(f"  - end_date: {end_date.date()}")
+            logger.info(f"  - radius_km: {radius_km}")
+            
             weather_events = await self.weather_service.get_weather_events(
                 latitude, longitude, severe_weather_start.date(), end_date.date(), radius_km=50.0
             )
+            
+            logger.info(f"🔍 DEBUG: weather_service.get_weather_events returned:")
+            logger.info(f"  - Total events: {len(weather_events) if weather_events else 0}")
+            if weather_events:
+                logger.info(f"  - First event: {weather_events[0]}")
+                logger.info(f"  - Event types: {[event.get('event_type', 'unknown') for event in weather_events[:5]]}")
+            else:
+                logger.warning(f"  - No events returned by weather service!")
             
             # Calculate property-specific weather summary
             summary = self._calculate_property_weather_summary(
@@ -241,7 +256,9 @@ class AddressAnalysisService:
         temp_range = self._get_temperature_range_from_historical(historical_weather)
         
         # Format severe weather events for the table
+        logger.info(f"🔍 DEBUG: About to format {len(weather_events)} weather events")
         severe_weather_events = self._format_severe_weather_events(weather_events)
+        logger.info(f"🔍 DEBUG: Formatted {len(severe_weather_events)} severe weather events")
         
         summary = {
             "current_conditions": {
@@ -276,6 +293,14 @@ class AddressAnalysisService:
             "temp_range": temp_range,
             "severe_weather_events": severe_weather_events
         }
+        
+        logger.info(f"🔍 DEBUG: Final summary created with:")
+        logger.info(f"  - severe_weather_events count: {len(severe_weather_events)}")
+        logger.info(f"  - total_events: {total_events}")
+        logger.info(f"  - severe_events: {severe_events}")
+        logger.info(f"  - hail_events: {hail_events}")
+        if severe_weather_events:
+            logger.info(f"  - First severe event: {severe_weather_events[0]}")
         
         return summary
     
@@ -387,11 +412,15 @@ class AddressAnalysisService:
         - Hail: ≥1 inch (property damage threshold)
         - Tornadoes: All tornadoes included regardless of EF rating
         """
+        logger.info(f"🔍 DEBUG: _format_severe_weather_events called with {len(weather_events)} events")
         severe_events = []
 
-        for event in weather_events:
+        for i, event in enumerate(weather_events):
+            logger.info(f"🔍 DEBUG: Processing event {i+1}/{len(weather_events)}: {event}")
             event_type = self._get_event_type(event)
+            logger.info(f"🔍 DEBUG: Event type extracted: '{event_type}'")
             if not event_type:
+                logger.warning(f"🔍 DEBUG: Skipping event {i+1} - no event type found")
                 continue
             
             # Filter out only specific non-roofing-relevant event types
