@@ -395,10 +395,10 @@ class AddressAnalysisService:
             if not event_type:
                 continue
             
-            # Filter out only specific non-roofing-relevant event types
-            # Keep tornadoes, hurricanes, hail, wind, floods, winter storms, and fires
-            if event_type in ['heat', 'cold', 'temperature', 'drought', 'dust']:
-                continue
+            # TEMPORARILY DISABLE FILTERING TO DEBUG WHAT EVENTS ARE BEING RETURNED
+            # TODO: Re-enable filtering once we understand the event types
+            # if event_type in ['heat', 'cold', 'temperature', 'drought', 'dust']:
+            #     continue
 
             magnitude_raw = self._get_event_field(
                 event, "magnitude", "magnitude_value", "mag", "value"
