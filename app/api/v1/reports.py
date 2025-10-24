@@ -214,13 +214,13 @@ async def download_report(
         raise HTTPException(status_code=404, detail="Report file not found")
     
     # Determine content type based on format
-    format = status.get("format", "pdf")
-    media_type = "application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    format = status.get("format", ReportFormat.PDF)
+    media_type = "application/pdf" if format == ReportFormat.PDF else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     
     return FileResponse(
         path=file_path,
         media_type=media_type,
-        filename=f"weather_report_{report_id}.{format}"
+        filename=f"weather_report_{report_id}.{format.value}"
     )
 
 @router.get("/templates", response_model=List[TemplateInfo])

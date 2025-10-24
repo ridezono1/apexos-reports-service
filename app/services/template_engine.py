@@ -114,34 +114,43 @@ class TemplateEngine:
                 boundary_name = spatial_data.get('boundary_info', {}).get('name', 'Analysis Area')
 
             # Generate maps
+            logger.info(f"Generating satellite map for {boundary_name} at {center_lat}, {center_lng}")
             map_service = MapGenerationService()
             satellite_map = await map_service.generate_satellite_map(
                 center_lat, center_lng, zoom_level=12, map_size=(600, 400), location_name=boundary_name
             )
+            logger.info(f"Satellite map generated: {len(satellite_map)} bytes")
 
             # Generate heat maps
+            logger.info(f"Generating heat maps with {len(coordinates)} boundary coordinates")
             heatmap_service = get_heatmap_service()
 
             # Risk heat map
+            logger.info("Generating risk heat map...")
             risk_heatmap = heatmap_service.generate_risk_heatmap(
                 coordinates,
                 spatial_data.get('risk_assessment', {}),
                 width=600,
                 height=400
             )
+            logger.info(f"Risk heat map generated: {len(risk_heatmap)} bytes")
 
             # Event density heat map
+            logger.info("Generating event density heat map...")
             event_heatmap = heatmap_service.generate_event_density_heatmap(
                 coordinates,
                 spatial_data.get('grid_data', []),
                 width=600,
                 height=400
             )
+            logger.info(f"Event density heat map generated: {len(event_heatmap)} bytes")
 
             # Convert maps to base64
+            logger.info("Converting maps to base64...")
             satellite_map_base64 = base64.b64encode(satellite_map).decode('utf-8')
             risk_heatmap_base64 = base64.b64encode(risk_heatmap).decode('utf-8')
             event_heatmap_base64 = base64.b64encode(event_heatmap).decode('utf-8')
+            logger.info(f"Base64 conversion complete - satellite: {len(satellite_map_base64)}, risk: {len(risk_heatmap_base64)}, event: {len(event_heatmap_base64)}")
 
             # Load and encode logo
             logo_path = Path(__file__).parent.parent.parent / "templates" / "apexos-icon.png"
@@ -187,11 +196,19 @@ class TemplateEngine:
                 'report_id': options.get('report_id') if options else None,
                 'options': options or {}
             }
+            
+            logger.info(f"Template context prepared with heat map variables:")
+            logger.info(f"  satellite_map_base64: {len(context['satellite_map_base64'])} chars")
+            logger.info(f"  risk_heatmap_base64: {len(context['risk_heatmap_base64'])} chars")
+            logger.info(f"  event_heatmap_base64: {len(context['event_heatmap_base64'])} chars")
 
             return template.render(context)
 
         except Exception as e:
             logger.error(f"Failed to render spatial template: {e}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             # Fallback to default template
             return await self._render_default_spatial_template(spatial_data, options)
 

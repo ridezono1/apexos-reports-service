@@ -11,6 +11,9 @@ import logging
 import sentry_sdk
 from urllib.parse import urlencode
 import math
+import os
+import hashlib
+import json
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -38,10 +41,66 @@ class NOAAWeatherService:
             buffer_factor=settings.noaa_cdo_rate_limit_buffer
         )
         
+        # CSV cache directory
+        self.cache_dir = os.path.join(settings.temp_dir, "storm_events_cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
         if not self.cdo_api_token:
             logger.warning("NOAA CDO API token not configured - historical data will be limited")
         
         logger.info("NOAA Weather API service initialized as primary provider")
+    
+    def _get_cache_file_path(self, year: int) -> str:
+        """Get cache file path for a given year."""
+        return os.path.join(self.cache_dir, f"storm_events_{year}.csv")
+    
+    def _is_cache_valid(self, cache_file: str, max_age_hours: int = 24) -> bool:
+        """Check if cache file is valid and not too old."""
+        if not os.path.exists(cache_file):
+            return False
+        
+        # Check file age
+        file_age = datetime.now().timestamp() - os.path.getmtime(cache_file)
+        return file_age < (max_age_hours * 3600)  # Convert hours to seconds
+    
+    async def _download_and_cache_csv(self, url: str, year: int) -> Optional[str]:
+        """Download compressed CSV file and cache it locally."""
+        cache_file = self._get_cache_file_path(year)
+        
+        # Check if we have a valid cached version
+        if self._is_cache_valid(cache_file):
+            logger.debug(f"Using cached Storm Events data for {year}")
+            return cache_file
+        
+        try:
+            logger.debug(f"Downloading Storm Events data for {year}")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+                response = await client.get(url)
+                
+                if response.status_code == 200:
+                    # Decompress the gzipped content
+                    import gzip
+                    import io
+                    
+                    # Read the compressed content
+                    compressed_content = response.content
+                    
+                    # Decompress it
+                    decompressed_content = gzip.decompress(compressed_content)
+                    
+                    # Write to cache file
+                    with open(cache_file, 'wb') as f:
+                        f.write(decompressed_content)
+                    
+                    logger.info(f"Cached Storm Events data for {year}")
+                    return cache_file
+                else:
+                    logger.warning(f"Failed to download Storm Events data for {year}: HTTP {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Error downloading Storm Events data for {year}: {e}")
+            return None
     
     async def get_current_weather(
         self,
@@ -261,6 +320,16 @@ class NOAAWeatherService:
                 except Exception as e:
                     logger.warning(f"Failed to fetch historical severe weather events from NOAA CDO: {e}")
             
+            # Always try Storm Events Database for historical severe weather events
+            try:
+                storm_events = await self._fetch_nws_storm_events(
+                    latitude, longitude, start_date, end_date
+                )
+                events.extend(storm_events)
+                logger.info(f"Fetched {len(storm_events)} historical severe weather events from Storm Events Database")
+            except Exception as e:
+                logger.warning(f"Failed to fetch historical severe weather events from Storm Events Database: {e}")
+            
             # Also get current alerts from NWS alerts API
             try:
                 current_alerts = await self._fetch_nws_current_alerts(
@@ -421,87 +490,145 @@ class NOAAWeatherService:
         start_date: date,
         end_date: date
     ) -> List[Dict[str, Any]]:
-        """Fetch severe weather events from NWS Storm Events Database via API."""
+        """Fetch severe weather events from NWS Storm Events Database via CSV files."""
         try:
             events = []
-            
-            # Use NOAA Storm Events API instead of CSV files
-            base_url = "https://www.ncei.noaa.gov/stormevents/csv"
             
             # Calculate bounding box (50km radius around location)
             lat_offset = 0.45  # ~50km offset
             lon_offset = 0.45  # ~50km offset
-            
+
             min_lat = latitude - lat_offset
             max_lat = latitude + lat_offset
             min_lon = longitude - lon_offset
             max_lon = longitude + lon_offset
             
+            logger.info(f"Geographic bounds: lat {min_lat:.3f} to {max_lat:.3f}, lon {min_lon:.3f} to {max_lon:.3f}")
+            
             # Generate URLs for each year in the date range
             current_year = start_date.year
             end_year = end_date.year
             
-            while current_year <= end_year:
-                # Try different URL formats for Storm Events data
-                urls_to_try = [
-                    f"{base_url}/StormEvents_details-ftp_v1.0_d{current_year}0101_c{current_year}1231.csv",
-                    f"https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d{current_year}0101_c{current_year}1231.csv",
-                    f"https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d{current_year}_c{current_year}.csv"
-                ]
+            # Only fetch years that have data available
+            # Storm Events Database typically has data up to previous month
+            available_years = []
+            current_year_today = date.today().year
+            
+            for year in range(current_year, end_year + 1):
+                if year < current_year_today:
+                    # Previous years should have complete data
+                    available_years.append(year)
+                elif year == current_year_today:
+                    # Current year may have partial data (up to previous month)
+                    # Only include if we're very late in the year (November/December) and past typical lag time
+                    if date.today().month >= 11:  # Only include current year if we're in Nov/Dec
+                        available_years.append(year)
+                # Skip future years (like 2025 when we're in 2025)
+            
+            logger.info(f"Date range: {start_date} to {end_date}")
+            logger.info(f"Current year today: {current_year_today}")
+            logger.info(f"Year range: {current_year} to {end_year}")
+            logger.info(f"Fetching Storm Events data for years: {available_years}")
+            
+            for year in available_years:
+                # Correct NOAA Storm Events Database URL format (compressed files)
+                # Use the latest available file for each year
+                if year == 2023:
+                    url = f"https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d{year}_c20250731.csv.gz"
+                elif year == 2024:
+                    url = f"https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d{year}_c20250818.csv.gz"
+                else:
+                    # For other years, try the general pattern
+                    url = f"https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/StormEvents_details-ftp_v1.0_d{year}_c20250520.csv.gz"
                 
-                for url in urls_to_try:
-                    try:
-                        async with httpx.AsyncClient(timeout=self.timeout) as client:
-                            response = await client.get(url)
-                            
-                            if response.status_code == 200:
-                                # Parse CSV data
-                                csv_content = response.text
-                                lines = csv_content.split('\n')
-                                
-                                if len(lines) > 1:  # Has header and data
-                                    headers = lines[0].split(',')
-                                    
-                                    for line in lines[1:]:
-                                        if not line.strip():
-                                            continue
-                                            
-                                        values = line.split(',')
-                                        if len(values) >= len(headers):
-                                            # Create record dictionary
-                                            record = dict(zip(headers, values))
-                                            
-                                            # Check if event is within our date range and geographic bounds
-                                            try:
-                                                event_date = datetime.strptime(record.get('BEGIN_DATE_TIME', ''), '%Y-%m-%d %H:%M:%S').date()
-                                                event_lat = float(record.get('BEGIN_LAT', 0))
-                                                event_lon = float(record.get('BEGIN_LON', 0))
-                                                
-                                                if (start_date <= event_date <= end_date and
-                                                    min_lat <= event_lat <= max_lat and
-                                                    min_lon <= event_lon <= max_lon):
-                                                    
-                                                    # Convert to our event format
-                                                    event = self._convert_storm_event_to_severe_weather_event(record)
-                                                    if event:
-                                                        events.append(event)
-                                                        
-                                            except (ValueError, TypeError):
-                                                continue
-                                                
-                                logger.info(f"Successfully fetched Storm Events data from {url}")
-                                break  # Success, no need to try other URLs
-                                
-                            else:
-                                logger.warning(f"HTTP error fetching Storm Events from {url}: {response.status_code}")
-                                
-                    except Exception as e:
-                        logger.warning(f"Error fetching Storm Events from {url}: {e}")
-                        continue
+                # Use caching for CSV downloads
+                cache_file = await self._download_and_cache_csv(url, year)
+                if not cache_file:
+                    logger.warning(f"Failed to get Storm Events data for {year}")
+                    continue
+                
+                try:
+                    # Parse cached CSV file
+                    import csv
+                    
+                    year_events = 0
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
                         
-                current_year += 1
+                        for record in reader:
+                            # Check if event is within our date range and geographic bounds
+                            try:
+                                # Parse event date - handle different date formats
+                                begin_date_str = record.get('BEGIN_DATE_TIME', '')
+                                if not begin_date_str:
+                                    continue
+                                    
+                                # Try different date formats
+                                event_date = None
+                                date_formats = [
+                                    '%d-%b-%y %H:%M:%S',  # DD-MMM-YY HH:MM:SS (NOAA format)
+                                    '%Y-%m-%d %H:%M:%S',  # YYYY-MM-DD HH:MM:SS
+                                    '%Y-%m-%d %H:%M:%S.%f',  # YYYY-MM-DD HH:MM:SS.microseconds
+                                    '%Y-%m-%d'  # YYYY-MM-DD
+                                ]
+                                
+                                for date_format in date_formats:
+                                    try:
+                                        event_date = datetime.strptime(begin_date_str, date_format).date()
+                                        break
+                                    except ValueError:
+                                        continue
+
+                                if not event_date:
+                                    # Debug: log first few date parsing failures
+                                    if year_events < 3:
+                                        logger.info(f"Date parsing failed for: '{begin_date_str}'")
+                                    continue
+                                    
+                                # Check date range
+                                if not (start_date <= event_date <= end_date):
+                                    # Debug: log first few date mismatches
+                                    if year_events < 3:
+                                        logger.info(f"Date mismatch: {event_date} not in range {start_date} to {end_date}")
+                                    continue
+                                
+                                # Parse coordinates
+                                event_lat_str = record.get('BEGIN_LAT', '')
+                                event_lon_str = record.get('BEGIN_LON', '')
+
+                                if not event_lat_str or not event_lon_str:
+                                    continue
+
+                                try:
+                                    event_lat = float(event_lat_str)
+                                    event_lon = float(event_lon_str)
+                                except (ValueError, TypeError):
+                                    continue
+
+                                # Check geographic bounds
+                                if not (min_lat <= event_lat <= max_lat and min_lon <= event_lon <= max_lon):
+                                    continue
+                                
+                                # Debug: log first few events found
+                                if len(events) < 3:
+                                    logger.info(f"Found event at {event_lat:.3f}, {event_lon:.3f} - {record.get('EVENT_TYPE', 'unknown')}")
+                                
+                                # Convert to our event format
+                                event = self._convert_storm_event_to_severe_weather_event(record)
+                                if event:
+                                    events.append(event)
+                                    year_events += 1
+                                    
+                            except (ValueError, TypeError) as e:
+                                logger.debug(f"Error parsing storm event record: {e}")
+                                continue
+                    
+                    logger.info(f"Successfully processed {year_events} Storm Events for {year}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing cached Storm Events data for {year}: {e}")
                 
-            logger.info(f"Fetched {len(events)} events from NWS Storm Events Database")
+            logger.info(f"Fetched {len(events)} total events from NWS Storm Events Database")
             return events
             
         except Exception as e:
@@ -511,51 +638,135 @@ class NOAAWeatherService:
     def _convert_storm_event_to_severe_weather_event(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Convert NWS Storm Event record to severe weather event format."""
         try:
-            event_type = record.get('EVENT_TYPE', '').lower()
-            magnitude = record.get('MAGNITUDE', '')
-            magnitude_type = record.get('MAGNITUDE_TYPE', '')
+            event_type_raw = record.get('EVENT_TYPE', '').strip()
+            magnitude_str = record.get('MAGNITUDE', '').strip()
+            magnitude_type = record.get('MAGNITUDE_TYPE', '').strip()
             
-            # Parse magnitude
-            try:
-                mag_value = float(magnitude) if magnitude else 0
-            except (ValueError, TypeError):
-                mag_value = 0
-                
-            # Determine severity based on event type and magnitude
-            severity = "moderate"
-            if event_type in ["tornado", "hail"] and mag_value > 0:
+            # Map NOAA event types to our standardized types
+            event_type_mapping = {
+                'hail': 'hail',
+                'thunderstorm wind': 'wind',
+                'high wind': 'wind',
+                'strong wind': 'wind',
+                'tornado': 'tornado',
+                'flash flood': 'flood',
+                'flood': 'flood',
+                'hurricane': 'hurricane',
+                'tropical storm': 'hurricane',
+                'tropical depression': 'hurricane',
+                'winter storm': 'winter',
+                'ice storm': 'winter',
+                'blizzard': 'winter',
+                'heavy snow': 'winter',
+                'extreme cold': 'cold',
+                'extreme heat': 'heat',
+                'heat wave': 'heat',
+                'wildfire': 'fire',
+                'fire weather': 'fire'
+            }
+            
+            event_type = event_type_mapping.get(event_type_raw.lower(), event_type_raw.lower())
+            
+            # Parse magnitude with proper handling
+            mag_value = None
+            if magnitude_str and magnitude_str != '':
+                try:
+                    mag_value = float(magnitude_str)
+                except (ValueError, TypeError):
+                    mag_value = None
+            
+            # Determine severity and insurance relevance based on thresholds from config
+            severity = "minor"
+            insurance_relevant = False
+            
+            if event_type == "hail":
+                if mag_value and mag_value >= 2.0:  # ≥2.0 inches
+                    severity = "extreme"
+                    insurance_relevant = True
+                elif mag_value and mag_value >= 1.0:  # ≥1.0 inch
+                    severity = "severe"
+                    insurance_relevant = True
+                elif mag_value and mag_value >= 0.5:  # ≥0.5 inch
+                    severity = "moderate"
+                    insurance_relevant = True
+                else:
+                    severity = "minor"
+                    
+            elif event_type == "wind":
+                if mag_value and mag_value >= 80:  # ≥80 mph
+                    severity = "extreme"
+                    insurance_relevant = True
+                elif mag_value and mag_value >= 60:  # ≥60 mph
+                    severity = "severe"
+                    insurance_relevant = True
+                elif mag_value and mag_value >= 40:  # ≥40 mph
+                    severity = "moderate"
+                    insurance_relevant = True
+                else:
+                    severity = "minor"
+                    
+            elif event_type in ["tornado", "hurricane"]:
+                # All tornadoes and hurricanes are severe and insurance-relevant
                 severity = "severe"
-            elif event_type in ["thunderstorm wind", "high wind"] and mag_value >= 60:
-                severity = "severe"
-            elif event_type in ["flash flood", "flood"] and mag_value > 0:
-                severity = "severe"
+                insurance_relevant = True
                 
-            # Format description
-            description = f"{event_type.title()} event"
-            if magnitude and magnitude_type:
-                description += f" ({magnitude} {magnitude_type})"
+            elif event_type in ["flood", "winter", "fire"]:
+                # Floods, winter storms, and fires are moderate-severe and insurance-relevant
+                severity = "moderate"
+                insurance_relevant = True
                 
-            # Format date
-            try:
-                date_str = record.get('BEGIN_DATE_TIME', '')
-                if date_str:
-                    date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                    date_str = date_obj.strftime('%Y-%m-%d')
-            except:
-                date_str = record.get('BEGIN_DATE_TIME', '')
+            elif event_type in ["heat", "cold"]:
+                # Extreme temperatures are moderate severity
+                severity = "moderate"
+                insurance_relevant = False  # Less relevant for roofing
+                
+            else:
+                # Unknown event types default to minor
+                severity = "minor"
+                insurance_relevant = False
+            
+            # Format description with magnitude if available
+            description = event_type_raw.title()
+            if mag_value is not None and magnitude_type:
+                if magnitude_type.lower() in ['inches', 'inch', 'in']:
+                    description += f" ({mag_value:.2f}\")"
+                elif magnitude_type.lower() in ['mph', 'miles per hour']:
+                    description += f" ({mag_value:.0f} mph)"
+                elif magnitude_type.lower() in ['knots', 'kt']:
+                    description += f" ({mag_value:.0f} kt)"
+                else:
+                    description += f" ({mag_value:.1f} {magnitude_type})"
+            
+            # Format timestamp - handle different date formats
+            timestamp_str = record.get('BEGIN_DATE_TIME', '')
+            formatted_date = timestamp_str
+            if timestamp_str:
+                try:
+                    # Try different date formats
+                    for date_format in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
+                        try:
+                            date_obj = datetime.strptime(timestamp_str, date_format)
+                            formatted_date = date_obj.strftime('%Y-%m-%d')
+                            break
+                        except ValueError:
+                            continue
+                except Exception:
+                    formatted_date = timestamp_str
                 
             return {
                 "event_type": event_type,
                 "severity": severity,
-                "urgency": "immediate" if severity == "severe" else "expected",
+                "urgency": "immediate" if severity in ["severe", "extreme"] else "expected",
                 "description": description,
-                "timestamp": date_str,
+                "timestamp": formatted_date,
                 "source": "NWS-StormEvents",
                 "magnitude": mag_value,
                 "magnitude_type": magnitude_type,
                 "location": record.get('CZ_NAME', ''),
                 "state": record.get('STATE', ''),
-                "county": record.get('CZ_FIPS', '')
+                "county": record.get('CZ_FIPS', ''),
+                "insurance_relevant": insurance_relevant,
+                "roofing_damage_risk": "high" if event_type in ["hail", "tornado", "hurricane"] else "medium" if event_type in ["wind", "flood"] else "low"
             }
             
         except Exception as e:
@@ -615,14 +826,14 @@ class NOAAWeatherService:
             if not date_str:
                 return None
             
-            # Determine event type based on dataset and data values
-            event_type = "unknown"
-            severity = "moderate"
-            magnitude = None
-            description = f"Weather event recorded on {date_str}"
-            
+            # Only process actual severe weather datasets, not GHCND daily measurements
             if dataset_id == "NEXRAD2" or dataset_id == "NEXRAD3":
                 # NEXRAD data - look for severe weather indicators
+                event_type = "unknown"
+                severity = "moderate"
+                magnitude = None
+                description = f"Weather event recorded on {date_str}"
+                
                 if record.get("REFL") and record.get("REFL") > 50:  # High reflectivity (hail)
                     event_type = "hail"
                     severity = "severe"
@@ -637,6 +848,18 @@ class NOAAWeatherService:
                     event_type = "thunderstorm"
                     severity = "moderate"
                     description = f"Thunderstorm activity detected"
+                
+                if event_type != "unknown":
+                    return {
+                        "event_type": event_type,
+                        "severity": severity,
+                        "urgency": "immediate" if severity == "severe" else "expected",
+                        "description": description,
+                        "timestamp": date_str,
+                        "source": f"NOAA-CDO-{dataset_id}",
+                        "magnitude": magnitude,
+                        "station_id": station_id
+                    }
             
             elif dataset_id == "SWDI":
                 # Severe Weather Data Inventory
@@ -644,51 +867,7 @@ class NOAAWeatherService:
                 severity = record.get("severity", "moderate").lower()
                 magnitude = record.get("magnitude")
                 description = record.get("description", f"Severe weather event: {event_type}")
-            
-            elif dataset_id == "GHCND":
-                # Look for severe weather indicators in GHCND data
-                # Note: Temperature values are in tenths of degrees Celsius
-                # Note: Precipitation values are in tenths of millimeters
-                datatype = record.get("datatype", "")
-                value = record.get("value", 0)
                 
-                # Use lenient thresholds to capture local severe weather indicators
-                if datatype == "PRCP" and value >= 10:  # Any precipitation (>=1mm)
-                    event_type = "precipitation"
-                    severity = "severe" if value >= 100 else "moderate" if value >= 50 else "light"
-                    magnitude = value / 10.0  # Convert to mm
-                    description = f"Precipitation event ({magnitude:.1f} mm)"
-                elif datatype == "TMAX" and value >= 300:  # Hot weather (>=30°C / 86°F)
-                    event_type = "heat"
-                    severity = "severe" if value >= 350 else "moderate"
-                    magnitude = value / 10.0  # Convert to °C
-                    description = f"Hot weather event ({magnitude:.1f}°C)"
-                elif datatype == "TMIN" and value <= 0:  # Cold weather (<=0°C / 32°F)
-                    event_type = "cold"
-                    severity = "severe" if value <= -50 else "moderate"
-                    magnitude = value / 10.0  # Convert to °C
-                    description = f"Cold weather event ({magnitude:.1f}°C)"
-                elif datatype == "SNOW" and value > 0:  # Any snow
-                    event_type = "winter"
-                    severity = "severe" if value >= 100 else "moderate"
-                    magnitude = value / 10.0  # Convert to mm
-                    description = f"Snow event ({magnitude:.1f} mm)"
-                elif datatype == "SNWD" and value > 0:  # Any snow depth
-                    event_type = "winter"
-                    severity = "severe" if value >= 100 else "moderate"
-                    magnitude = value / 10.0  # Convert to mm
-                    description = f"Snow depth event ({magnitude:.1f} mm)"
-                elif datatype in ["WSFG", "WSF1", "WSF2", "WSF5", "WSF6", "WSF7", "WSF8", "WSF9", "WSFA", "WSFB", "WSFC", "WSFD", "WSFE", "WSFF", "WSFG", "WSFH", "WSFI", "WSFJ", "WSFK", "WSFL", "WSFM", "WSFN", "WSFO", "WSFP", "WSFQ", "WSFR", "WSFS", "WSFT", "WSFU", "WSFV", "WSFW", "WSFX", "WSFY", "WSFZ"]:
-                    # Wind speed data - use lower thresholds to capture damaging winds
-                    wind_speed_mph = value * 0.621371  # Convert m/s to mph
-                    if wind_speed_mph >= 20:  # Moderate wind (>=20 mph)
-                        event_type = "wind"
-                        severity = "severe" if wind_speed_mph >= 40 else "moderate"
-                        magnitude = wind_speed_mph
-                        description = f"High wind event ({magnitude:.1f} mph)"
-            
-            # Only return events that are actually severe weather
-            if event_type in ["hail", "wind", "tornado", "thunderstorm", "flood", "heat", "cold", "winter", "precipitation"]:
                 return {
                     "event_type": event_type,
                     "severity": severity,
@@ -700,6 +879,9 @@ class NOAAWeatherService:
                     "station_id": station_id
                 }
             
+            # GHCND dataset contains daily weather measurements, not discrete severe weather events
+            # We should not infer severe weather from basic temperature/precipitation/wind measurements
+            # Use Storm Events Database for actual severe weather events instead
             return None
             
         except Exception as e:

@@ -29,6 +29,8 @@ class MapService:
         try:
             import os
             import shutil
+            import tempfile
+            import uuid
 
             chrome_options = Options()
             chrome_options.add_argument('--headless')
@@ -36,6 +38,27 @@ class MapService:
             chrome_options.add_argument('--disable-dev-shm-usage')
             chrome_options.add_argument('--disable-gpu')
             chrome_options.add_argument('--window-size=1200,800')
+            chrome_options.add_argument('--disable-web-security')
+            chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-plugins')
+            chrome_options.add_argument('--disable-images')
+            chrome_options.add_argument('--disable-javascript')
+            chrome_options.add_argument('--disable-background-timer-throttling')
+            chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+            chrome_options.add_argument('--disable-renderer-backgrounding')
+            chrome_options.add_argument('--disable-field-trial-config')
+            chrome_options.add_argument('--disable-back-forward-cache')
+            chrome_options.add_argument('--disable-ipc-flooding-protection')
+            
+            # Use unique user data directory to avoid conflicts
+            unique_user_data_dir = os.path.join(tempfile.gettempdir(), f"chrome_user_data_{uuid.uuid4().hex[:8]}")
+            chrome_options.add_argument(f'--user-data-dir={unique_user_data_dir}')
+            
+            # Additional options to prevent conflicts
+            chrome_options.add_argument('--remote-debugging-port=0')  # Use random port
+            chrome_options.add_argument('--disable-logging')
+            chrome_options.add_argument('--log-level=3')  # Only fatal errors
 
             # Try to detect Chrome/Chromium binary location
             chrome_bin_candidates = [
@@ -79,6 +102,10 @@ class MapService:
 
             driver = webdriver.Chrome(service=service, options=chrome_options)
             logger.info("Chrome driver initialized successfully")
+            
+            # Store cleanup info for later
+            driver._temp_user_data_dir = unique_user_data_dir
+            
             return driver
         except Exception as e:
             logger.error(f"Error initializing Chrome driver: {str(e)}")
@@ -139,6 +166,15 @@ class MapService:
 
             finally:
                 driver.quit()
+                
+                # Clean up temporary user data directory
+                try:
+                    temp_dir = getattr(driver, '_temp_user_data_dir', None)
+                    if temp_dir and os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        logger.debug(f"Cleaned up temporary Chrome user data directory: {temp_dir}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clean up temporary directory: {cleanup_error}")
 
         except Exception as e:
             logger.error(f"Error rendering map to image: {str(e)}")
