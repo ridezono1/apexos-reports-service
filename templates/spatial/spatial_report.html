@@ -371,6 +371,20 @@
         </div>
     </div>
 
+    <!-- Data Freshness Information -->
+    {% if data_freshness %}
+    <div style="background: #fff9e6; border-left: 4px solid #f39c12; padding: 15px 20px; margin: 20px 0; border-radius: 4px;">
+        <div style="font-size: 10pt; color: #7f6003; line-height: 1.5;">
+            <strong>📊 Data Source & Freshness:</strong><br>
+            {{ data_freshness.disclaimer }}
+            {% if data_freshness.warning_message %}
+            <br><br>
+            <em>{{ data_freshness.warning_message }}</em>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Maps Section - Heat Maps -->
     <div class="maps-container">
         <div class="map-box">

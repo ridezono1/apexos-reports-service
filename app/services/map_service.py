@@ -157,9 +157,10 @@ class MapService:
                 if image.size != (width, height):
                     image = image.resize((width, height), Image.Resampling.LANCZOS)
 
-                # Convert back to bytes
+                # Convert back to bytes with optimization for mobile
                 output_buffer = io.BytesIO()
-                image.save(output_buffer, format='PNG', optimize=True)
+                # Use optimize=True and compress_level for smaller file sizes
+                image.save(output_buffer, format='PNG', optimize=True, compress_level=6)
                 output_buffer.seek(0)
 
                 return output_buffer.read()

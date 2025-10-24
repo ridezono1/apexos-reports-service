@@ -231,12 +231,21 @@ class PDFGenerationService:
             self.styles["CustomBody"],
         )
         elements.append(generated)
+        elements.append(Spacer(1, 0.1 * inch))
+
+        # Data freshness disclaimer (if available)
+        data_freshness = report_data.get("data_freshness", {})
+        if data_freshness:
+            disclaimer = Paragraph(
+                f"<b>Data Source:</b> {data_freshness.get('disclaimer', 'NOAA Storm Events Database')}",
+                self.styles["CustomBody"],
+            )
+            elements.append(disclaimer)
+
         elements.append(Spacer(1, 0.5 * inch))
 
         # Branding
-        branding = Paragraph(
-            "ApexOS Weather Analysis", self.styles["CustomHeading"]
-        )
+        branding = Paragraph("ApexOS Weather Analysis", self.styles["CustomHeading"])
         elements.append(branding)
 
         return elements
@@ -282,6 +291,17 @@ class PDFGenerationService:
             self.styles["CustomBody"],
         )
         elements.append(generated)
+        elements.append(Spacer(1, 0.1 * inch))
+
+        # Data freshness disclaimer (if available)
+        data_freshness = report_data.get("data_freshness", {})
+        if data_freshness:
+            disclaimer = Paragraph(
+                f"<b>Data Source:</b> {data_freshness.get('disclaimer', 'NOAA Storm Events Database')}",
+                self.styles["CustomBody"],
+            )
+            elements.append(disclaimer)
+
         elements.append(Spacer(1, 0.5 * inch))
 
         # Branding
@@ -386,7 +406,7 @@ class PDFGenerationService:
     def _build_heat_map_section(self, spatial_data: Dict[str, Any]) -> List:
         """Build heat map section with actual Folium-generated heat map."""
         import base64
-        
+
         elements = []
 
         # Section heading
@@ -409,7 +429,7 @@ class PDFGenerationService:
         # First, check if we have a pre-generated heat map in charts
         charts = spatial_data.get("charts", {})
         heat_map_b64_data = charts.get("heat_map")
-        
+
         if heat_map_b64_data:
             try:
                 # Extract base64 data from data URI (format: "data:image/png;base64,...")
@@ -417,12 +437,14 @@ class PDFGenerationService:
                     heat_map_b64 = heat_map_b64_data.split(",", 1)[1]
                 else:
                     heat_map_b64 = heat_map_b64_data
-                
+
                 # Decode base64 to bytes
                 heat_map_bytes = base64.b64decode(heat_map_b64)
-                
+
                 # Add to PDF
-                heat_map_img = RLImage(io.BytesIO(heat_map_bytes), width=6*inch, height=4*inch)
+                heat_map_img = RLImage(
+                    io.BytesIO(heat_map_bytes), width=6 * inch, height=4 * inch
+                )
                 elements.append(heat_map_img)
                 logger.info("Successfully added pre-generated heat map to PDF")
 
@@ -441,11 +463,15 @@ class PDFGenerationService:
                     # Extract center coordinates
                     center_lat = spatial_data.get("center_latitude")
                     center_lon = spatial_data.get("center_longitude")
-                    
+
                     if not center_lat or not center_lon:
                         # Try to get from first event
-                        center_lat = events[0].get("latitude", events[0].get("begin_lat"))
-                        center_lon = events[0].get("longitude", events[0].get("begin_lon"))
+                        center_lat = events[0].get(
+                            "latitude", events[0].get("begin_lat")
+                        )
+                        center_lon = events[0].get(
+                            "longitude", events[0].get("begin_lon")
+                        )
 
                     if center_lat and center_lon:
                         logger.info(f"Generating heat map from events (fallback)")
@@ -454,11 +480,13 @@ class PDFGenerationService:
                             events=events,
                             center_lat=center_lat,
                             center_lon=center_lon,
-                            title="Weather Event Heat Map"
+                            title="Weather Event Heat Map",
                         )
 
                         # Add to PDF
-                        heat_map_img = RLImage(io.BytesIO(heat_map_bytes), width=6*inch, height=4*inch)
+                        heat_map_img = RLImage(
+                            io.BytesIO(heat_map_bytes), width=6 * inch, height=4 * inch
+                        )
                         elements.append(heat_map_img)
                     else:
                         placeholder = Paragraph(
@@ -509,41 +537,52 @@ class PDFGenerationService:
         if events and len(events) > 0:
             try:
                 # Time Series Chart
-                subheading1 = Paragraph("Events Over Time", self.styles["CustomSubheading"])
+                subheading1 = Paragraph(
+                    "Events Over Time", self.styles["CustomSubheading"]
+                )
                 elements.append(subheading1)
                 elements.append(Spacer(1, 0.1 * inch))
 
                 time_series_bytes = self.chart_service.generate_time_series_chart(
-                    events=events,
-                    title="Weather Events Over Time"
+                    events=events, title="Weather Events Over Time"
                 )
-                time_series_img = RLImage(io.BytesIO(time_series_bytes), width=6*inch, height=3.5*inch)
+                time_series_img = RLImage(
+                    io.BytesIO(time_series_bytes), width=6 * inch, height=3.5 * inch
+                )
                 elements.append(time_series_img)
                 elements.append(Spacer(1, 0.3 * inch))
 
                 # Event Distribution Chart
-                subheading2 = Paragraph("Event Type Distribution", self.styles["CustomSubheading"])
+                subheading2 = Paragraph(
+                    "Event Type Distribution", self.styles["CustomSubheading"]
+                )
                 elements.append(subheading2)
                 elements.append(Spacer(1, 0.1 * inch))
 
-                distribution_bytes = self.chart_service.generate_event_distribution_chart(
-                    events=events,
-                    title="Weather Event Distribution"
+                distribution_bytes = (
+                    self.chart_service.generate_event_distribution_chart(
+                        events=events, title="Weather Event Distribution"
+                    )
                 )
-                distribution_img = RLImage(io.BytesIO(distribution_bytes), width=6*inch, height=3.5*inch)
+                distribution_img = RLImage(
+                    io.BytesIO(distribution_bytes), width=6 * inch, height=3.5 * inch
+                )
                 elements.append(distribution_img)
                 elements.append(Spacer(1, 0.3 * inch))
 
                 # Monthly Breakdown Chart
-                subheading3 = Paragraph("Monthly Breakdown", self.styles["CustomSubheading"])
+                subheading3 = Paragraph(
+                    "Monthly Breakdown", self.styles["CustomSubheading"]
+                )
                 elements.append(subheading3)
                 elements.append(Spacer(1, 0.1 * inch))
 
                 monthly_bytes = self.chart_service.generate_monthly_breakdown_chart(
-                    events=events,
-                    title="Monthly Event Breakdown"
+                    events=events, title="Monthly Event Breakdown"
                 )
-                monthly_img = RLImage(io.BytesIO(monthly_bytes), width=6*inch, height=3.5*inch)
+                monthly_img = RLImage(
+                    io.BytesIO(monthly_bytes), width=6 * inch, height=3.5 * inch
+                )
                 elements.append(monthly_img)
 
             except Exception as e:

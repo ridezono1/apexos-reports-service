@@ -503,7 +503,7 @@ class NOAAWeatherService:
             min_lon = longitude - lon_offset
             max_lon = longitude + lon_offset
             
-            logger.info(f"Geographic bounds: lat {min_lat:.3f} to {max_lat:.3f}, lon {min_lon:.3f} to {max_lon:.3f}")
+            logger.debug(f"Geographic bounds: lat {min_lat:.3f} to {max_lat:.3f}, lon {min_lon:.3f} to {max_lon:.3f}")
             
             # Generate URLs for each year in the date range
             current_year = start_date.year
@@ -525,10 +525,10 @@ class NOAAWeatherService:
                         available_years.append(year)
                 # Skip future years (like 2025 when we're in 2025)
             
-            logger.info(f"Date range: {start_date} to {end_date}")
-            logger.info(f"Current year today: {current_year_today}")
-            logger.info(f"Year range: {current_year} to {end_year}")
-            logger.info(f"Fetching Storm Events data for years: {available_years}")
+            logger.debug(f"Date range: {start_date} to {end_date}")
+            logger.debug(f"Current year today: {current_year_today}")
+            logger.debug(f"Year range: {current_year} to {end_year}")
+            logger.debug(f"Fetching Storm Events data for years: {available_years}")
             
             for year in available_years:
                 # Correct NOAA Storm Events Database URL format (compressed files)
@@ -582,14 +582,14 @@ class NOAAWeatherService:
                                 if not event_date:
                                     # Debug: log first few date parsing failures
                                     if year_events < 3:
-                                        logger.info(f"Date parsing failed for: '{begin_date_str}'")
+                                        logger.debug(f"Date parsing failed for: '{begin_date_str}'")
                                     continue
                                     
                                 # Check date range
                                 if not (start_date <= event_date <= end_date):
                                     # Debug: log first few date mismatches
                                     if year_events < 3:
-                                        logger.info(f"Date mismatch: {event_date} not in range {start_date} to {end_date}")
+                                        logger.debug(f"Date mismatch: {event_date} not in range {start_date} to {end_date}")
                                     continue
                                 
                                 # Parse coordinates
@@ -611,7 +611,7 @@ class NOAAWeatherService:
                                 
                                 # Debug: log first few events found
                                 if len(events) < 3:
-                                    logger.info(f"Found event at {event_lat:.3f}, {event_lon:.3f} - {record.get('EVENT_TYPE', 'unknown')}")
+                                    logger.debug(f"Found event at {event_lat:.3f}, {event_lon:.3f} - {record.get('EVENT_TYPE', 'unknown')}")
                                 
                                 # Convert to our event format
                                 event = self._convert_storm_event_to_severe_weather_event(record)
@@ -623,7 +623,7 @@ class NOAAWeatherService:
                                 logger.debug(f"Error parsing storm event record: {e}")
                                 continue
                     
-                    logger.info(f"Successfully processed {year_events} Storm Events for {year}")
+                    logger.debug(f"Successfully processed {year_events} Storm Events for {year}")
                     
                 except Exception as e:
                     logger.error(f"Error processing cached Storm Events data for {year}: {e}")

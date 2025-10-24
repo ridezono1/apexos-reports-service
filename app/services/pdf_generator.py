@@ -113,9 +113,13 @@ class PDFGenerator:
             logger.info("Generating PDF with WeasyPrint...")
             html_doc = HTML(string=html_content)
 
+            # Enable PDF compression for smaller file sizes (mobile optimization)
             html_doc.write_pdf(
                 str(output_path),
-                font_config=font_config
+                font_config=font_config,
+                compress=True,  # Enable PDF stream compression
+                pdf_forms=False,  # Disable forms to reduce overhead
+                uncompressed_pdf=False  # Ensure compression is enabled
             )
 
             logger.info(f"PDF generated with WeasyPrint: {output_path}")
