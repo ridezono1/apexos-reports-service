@@ -202,24 +202,15 @@ class AddressAnalysisService:
             )
 
             # Always fetch 24 months of severe weather events (tornadoes, hurricanes, hail, strong winds, etc.)
-            logger.info(f"🔍 DEBUG: Calling weather_service.get_weather_events with:")
-            logger.info(f"  - latitude: {latitude}")
-            logger.info(f"  - longitude: {longitude}")
-            logger.info(f"  - start_date: {severe_weather_start.date()}")
-            logger.info(f"  - end_date: {end_date.date()}")
-            logger.info(f"  - radius_km: {radius_km}")
+            logger.info(f"🔍 DEBUG: Calling weather_service.get_weather_events with lat={latitude}, lon={longitude}, start={severe_weather_start.date()}, end={end_date.date()}")
             
             weather_events = await self.weather_service.get_weather_events(
                 latitude, longitude, severe_weather_start.date(), end_date.date(), radius_km=50.0
             )
             
-            logger.info(f"🔍 DEBUG: weather_service.get_weather_events returned:")
-            logger.info(f"  - Total events: {len(weather_events) if weather_events else 0}")
-            if weather_events:
-                logger.info(f"  - First event: {weather_events[0]}")
-                logger.info(f"  - Event types: {[event.get('event_type', 'unknown') for event in weather_events[:5]]}")
-            else:
-                logger.warning(f"  - No events returned by weather service!")
+            logger.info(f"🔍 DEBUG: weather_service returned {len(weather_events) if weather_events else 0} events")
+            if weather_events and len(weather_events) > 0:
+                logger.info(f"🔍 DEBUG: Sample event: {weather_events[0]}")
             
             # Calculate property-specific weather summary
             summary = self._calculate_property_weather_summary(
@@ -294,13 +285,7 @@ class AddressAnalysisService:
             "severe_weather_events": severe_weather_events
         }
         
-        logger.info(f"🔍 DEBUG: Final summary created with:")
-        logger.info(f"  - severe_weather_events count: {len(severe_weather_events)}")
-        logger.info(f"  - total_events: {total_events}")
-        logger.info(f"  - severe_events: {severe_events}")
-        logger.info(f"  - hail_events: {hail_events}")
-        if severe_weather_events:
-            logger.info(f"  - First severe event: {severe_weather_events[0]}")
+        logger.info(f"🔍 DEBUG: Final summary created with {len(severe_weather_events)} severe events, {total_events} total events")
         
         return summary
     
@@ -416,11 +401,14 @@ class AddressAnalysisService:
         severe_events = []
 
         for i, event in enumerate(weather_events):
-            logger.info(f"🔍 DEBUG: Processing event {i+1}/{len(weather_events)}: {event}")
+            if i < 3:  # Only log first 3 events to prevent overflow
+                logger.info(f"🔍 DEBUG: Processing event {i+1}: {event}")
             event_type = self._get_event_type(event)
-            logger.info(f"🔍 DEBUG: Event type extracted: '{event_type}'")
+            if i < 3:
+                logger.info(f"🔍 DEBUG: Event type extracted: '{event_type}'")
             if not event_type:
-                logger.warning(f"🔍 DEBUG: Skipping event {i+1} - no event type found")
+                if i < 3:
+                    logger.warning(f"🔍 DEBUG: Skipping event {i+1} - no event type found")
                 continue
             
             # Filter out only specific non-roofing-relevant event types
