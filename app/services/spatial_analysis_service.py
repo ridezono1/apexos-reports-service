@@ -385,13 +385,13 @@ class SpatialAnalysisService:
 
         # Determine grid density based on boundary type
         if boundary_type in ["county"]:
-            grid_spacing = 0.025  # ~2.5km spacing (denser for better coverage)
+            grid_spacing = 0.05  # ~5km spacing (reduced from 0.025)
         elif boundary_type in ["city"]:
-            grid_spacing = 0.01  # ~1km spacing (increased from 0.02)
+            grid_spacing = 0.02  # ~2km spacing (reduced from 0.01)
         elif boundary_type in ["neighborhood"]:
-            grid_spacing = 0.005  # ~0.5km spacing
+            grid_spacing = 0.01  # ~1km spacing (reduced from 0.005)
         else:
-            grid_spacing = 0.015  # ~1.5km spacing
+            grid_spacing = 0.03  # ~3km spacing (reduced from 0.015)
 
         # Generate grid points
         grid_points = []
@@ -405,6 +405,15 @@ class SpatialAnalysisService:
                 lon += grid_spacing
             lat += grid_spacing
 
+        # Limit maximum grid points to prevent excessive API calls
+        max_grid_points = 50  # Reasonable limit for performance
+        if len(grid_points) > max_grid_points:
+            logger.warning(f"Grid has {len(grid_points)} points, limiting to {max_grid_points} for performance")
+            # Sample evenly distributed points
+            step = len(grid_points) // max_grid_points
+            grid_points = grid_points[::step][:max_grid_points]
+
+        logger.info(f"Generated {len(grid_points)} grid points for spatial analysis")
         return grid_points
 
     def _point_in_polygon(
@@ -456,39 +465,50 @@ class SpatialAnalysisService:
 
             # Fetch weather data for each grid point
             weather_data = []
-            for lat, lon in grid_points:
-                try:
-                    # Get current weather
-                    current = await self.weather_service.get_current_weather(lat, lon)
+            
+            # Process grid points in batches to avoid overwhelming the API
+            batch_size = 10
+            for i in range(0, len(grid_points), batch_size):
+                batch = grid_points[i:i + batch_size]
+                logger.info(f"Processing grid batch {i//batch_size + 1}/{(len(grid_points) + batch_size - 1)//batch_size}")
+                
+                for lat, lon in batch:
+                    try:
+                        # Get current weather
+                        current = await self.weather_service.get_current_weather(lat, lon)
 
-                    # Get historical weather (uses selected analysis period)
-                    historical = await self.weather_service.get_historical_weather(
-                        lat, lon, start_date.date(), end_date.date()
-                    )
+                        # Get historical weather (uses selected analysis period)
+                        historical = await self.weather_service.get_historical_weather(
+                            lat, lon, start_date.date(), end_date.date()
+                        )
 
-                    # Get weather events (ALWAYS 24 months for comprehensive severe weather history)
-                    events = await self.weather_service.get_weather_events(
-                        lat,
-                        lon,
-                        severe_weather_start.date(),
-                        end_date.date(),
-                        radius_km=50.0,
-                    )
+                        # Get weather events (ALWAYS 24 months for comprehensive severe weather history)
+                        events = await self.weather_service.get_weather_events(
+                            lat,
+                            lon,
+                            severe_weather_start.date(),
+                            end_date.date(),
+                            radius_km=50.0,
+                        )
 
-                    weather_data.append(
-                        {
-                            "coordinates": (lat, lon),
-                            "current_weather": current,
-                            "historical_weather": historical,
-                            "weather_events": events,
-                        }
-                    )
+                        weather_data.append(
+                            {
+                                "coordinates": (lat, lon),
+                                "current_weather": current,
+                                "historical_weather": historical,
+                                "weather_events": events,
+                            }
+                        )
 
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to fetch weather data for {lat}, {lon}: {e}"
-                    )
-                    continue
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to fetch weather data for {lat}, {lon}: {e}"
+                        )
+                        continue
+                
+                # Small delay between batches to be respectful to APIs
+                if i + batch_size < len(grid_points):
+                    await asyncio.sleep(0.1)
 
             return {"grid_data": weather_data}
 

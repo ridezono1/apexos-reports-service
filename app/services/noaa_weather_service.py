@@ -652,21 +652,45 @@ class NOAAWeatherService:
             available_years = []
             current_year_today = date.today().year
             
+            # First, check which years have cached data
+            cached_years = []
             for year in range(current_year, end_year + 1):
-                if year < current_year_today:
-                    # Previous years should have complete data
+                cache_file = self._get_cache_file_path(year)
+                if os.path.exists(cache_file):
+                    cached_years.append(year)
+            
+            logger.info(f"Cached years available: {cached_years}")
+            
+            for year in range(current_year, end_year + 1):
+                # Prioritize cached data
+                if year in cached_years:
                     available_years.append(year)
+                elif year < current_year_today:
+                    # Previous years should have complete data (but not cached)
+                    # Skip for now to avoid 404 errors
+                    logger.warning(f"Skipping year {year} - not cached and may not be available")
+                    continue
                 elif year == current_year_today:
-                    # Current year may have partial data (up to previous month)
-                    # Only include if we're very late in the year (November/December) and past typical lag time
-                    if date.today().month >= 11:  # Only include current year if we're in Nov/Dec
-                        available_years.append(year)
-                # Skip future years (like 2025 when we're in 2025)
+                    # Current year data is typically not available until late in the year
+                    # Skip current year data to avoid 404 errors
+                    logger.warning(f"Skipping current year {year} - data not yet available")
+                    continue
+                # Skip future years
             
             logger.debug(f"Date range: {start_date} to {end_date}")
             logger.debug(f"Current year today: {current_year_today}")
             logger.debug(f"Year range: {current_year} to {end_year}")
             logger.debug(f"Fetching Storm Events data for years: {available_years}")
+            
+            # Ensure we have at least some data to work with
+            if not available_years:
+                logger.warning(f"No Storm Events data available for years {current_year}-{end_year}")
+                logger.info(f"Using cached data only: {cached_years}")
+                available_years = cached_years  # Use whatever cached data we have
+            
+            if not available_years:
+                logger.error("No Storm Events data available at all")
+                return []
             
             # Auto-discover latest CSV files for all years
             csv_discovery_service = get_csv_discovery_service()
