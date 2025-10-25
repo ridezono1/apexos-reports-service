@@ -194,14 +194,15 @@ class BackgroundCacheRefreshService:
     async def warmup_cache(self, years: Optional[List[int]] = None):
         """
         Warmup cache by pre-loading CSV files for specified years.
-        
+
         Args:
-            years: List of years to warmup (default: last 3 years)
+            years: List of years to warmup (default: last 3 years excluding current year)
         """
         try:
             if years is None:
                 current_year = date.today().year
-                years = list(range(current_year - 2, current_year + 1))
+                # Only warmup previous years - current year data not available yet
+                years = list(range(current_year - 2, current_year))
             
             logger.info(f"Starting cache warmup for years: {years}")
             
