@@ -8,7 +8,7 @@
     <style>
         @page {
             size: A4;
-            margin: 0.75in;
+            margin: 0.5in;
         }
 
         body {
@@ -23,8 +23,8 @@
         /* Header with Logo - Purple gradient banner */
         .report-header {
             background: linear-gradient(90deg, #6B46C1 0%, #805AD5 100%);
-            padding: 20px 30px;
-            margin: -0.75in -0.75in 30px -0.75in;
+            padding: 15px 20px;
+            margin: -0.5in -0.5in 20px -0.5in;
             color: white;
         }
 
@@ -35,7 +35,7 @@
 
         .header-table td {
             vertical-align: middle;
-            padding: 5px;
+            padding: 3px;
         }
 
         .header-logo-cell {
@@ -50,7 +50,7 @@
         }
 
         .header-title-cell {
-            padding-left: 15px;
+            padding-left: 10px;
         }
 
         .report-header h1 {
@@ -91,9 +91,9 @@
         .property-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 25px;
+            padding: 20px;
             border-radius: 8px;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
@@ -119,8 +119,8 @@
         .maps-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin: 30px 0;
+            gap: 15px;
+            margin: 20px 0;
             page-break-inside: avoid;
         }
 
@@ -150,7 +150,7 @@
 
         /* Risk Assessment Cards */
         .risk-section {
-            margin: 30px 0;
+            margin: 20px 0;
             page-break-inside: avoid;
         }
 
@@ -240,7 +240,7 @@
             color: #27ae60;
         }
 
-        .data-quality-badge {
+        .data-source-badge {
             display: inline-block;
             padding: 3px 8px;
             border-radius: 8px;
@@ -250,18 +250,18 @@
             letter-spacing: 0.3px;
         }
 
-        .data-quality-badge.verified {
+        .data-source-badge.sed {
             background: #f0f9f4;
             color: #27ae60;
         }
 
-        .data-quality-badge.preliminary {
+        .data-source-badge.spc {
             background: #fff9e6;
             color: #f39c12;
             font-style: italic;
         }
 
-        .data-quality-badge.current {
+        .data-source-badge.ghcnd {
             background: #e3f2fd;
             color: #2196f3;
         }
@@ -280,9 +280,9 @@
         .weather-summary {
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: white;
-            padding: 20px;
+            padding: 15px;
             border-radius: 8px;
-            margin: 30px 0;
+            margin: 20px 0;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
@@ -405,14 +405,14 @@
 
         /* Alerts Section */
         .alerts-section {
-            margin: 30px 0;
+            margin: 20px 0;
         }
 
         .alert-box {
             border-left: 4px solid #f39c12;
             background: #fff8e1;
-            padding: 15px;
-            margin: 10px 0;
+            padding: 10px;
+            margin: 8px 0;
             border-radius: 4px;
         }
 
@@ -508,52 +508,52 @@
     <!-- Weather Summary Table -->
     <div class="weather-summary-section">
         <h2 class="section-title">Weather Summary</h2>
-        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
+        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
                 <thead>
                     <tr style="background: #34495e; color: white;">
-                        <th style="padding: 12px; text-align: left; font-weight: 500;">Metric</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Value</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Unit</th>
-                        <th style="padding: 12px; text-align: left; font-weight: 500;">Notes</th>
+                        <th style="padding: 8px; text-align: left; font-weight: 500;">Metric</th>
+                        <th style="padding: 8px; text-align: center; font-weight: 500;">Value</th>
+                        <th style="padding: 8px; text-align: center; font-weight: 500;">Unit</th>
+                        <th style="padding: 8px; text-align: left; font-weight: 500;">Notes</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">Max Wind Speed</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.max_wind_speed | default(0) }}</td>
-                        <td style="padding: 10px; text-align: center;">mph</td>
-                        <td style="padding: 10px;">Peak wind gust</td>
+                        <td style="padding: 6px; font-weight: 500;">Max Wind Speed</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.max_wind_speed | default(0) }}</td>
+                        <td style="padding: 6px; text-align: center;">mph</td>
+                        <td style="padding: 6px;">Peak wind gust</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">Weather Events</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.total_events | default(0) }}</td>
-                        <td style="padding: 10px; text-align: center;">count</td>
-                        <td style="padding: 10px;">Total events</td>
+                        <td style="padding: 6px; font-weight: 500;">Weather Events</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.total_events | default(0) }}</td>
+                        <td style="padding: 6px; text-align: center;">count</td>
+                        <td style="padding: 6px;">Total events</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">Severe Weather Events</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.severe_events | default(0) }}</td>
-                        <td style="padding: 10px; text-align: center;">count</td>
-                        <td style="padding: 10px;">Hail, tornado, etc.</td>
+                        <td style="padding: 6px; font-weight: 500;">Severe Weather Events</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.severe_events | default(0) }}</td>
+                        <td style="padding: 6px; text-align: center;">count</td>
+                        <td style="padding: 6px;">Hail, tornado, etc.</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">Hail Events</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.hail_events | default(0) }}</td>
-                        <td style="padding: 10px; text-align: center;">count</td>
-                        <td style="padding: 10px;">Detected hail occurrences</td>
+                        <td style="padding: 6px; font-weight: 500;">Hail Events</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.hail_events | default(0) }}</td>
+                        <td style="padding: 6px; text-align: center;">count</td>
+                        <td style="padding: 6px;">Detected hail occurrences</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">Max Hail Size</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.max_hail_size | default(0) }}</td>
-                        <td style="padding: 10px; text-align: center;">inches</td>
-                        <td style="padding: 10px;">Largest recorded</td>
+                        <td style="padding: 6px; font-weight: 500;">Max Hail Size</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.max_hail_size | default(0) }}</td>
+                        <td style="padding: 6px; text-align: center;">inches</td>
+                        <td style="padding: 6px;">Largest recorded</td>
                     </tr>
                     <tr>
-                        <td style="padding: 10px; font-weight: 500;">Temperature Range</td>
-                        <td style="padding: 10px; text-align: center;">{{ weather_summary.temp_range | default('N/A') }}</td>
-                        <td style="padding: 10px; text-align: center;">°F</td>
-                        <td style="padding: 10px;">Min to Max</td>
+                        <td style="padding: 6px; font-weight: 500;">Temperature Range</td>
+                        <td style="padding: 6px; text-align: center;">{{ weather_summary.temp_range | default('N/A') }}</td>
+                        <td style="padding: 6px; text-align: center;">°F</td>
+                        <td style="padding: 6px;">Min to Max</td>
                     </tr>
                 </tbody>
             </table>
@@ -567,31 +567,31 @@
             Includes tornadoes, hurricanes, tropical storms, hail (≥1"), damaging winds (≥60 mph), floods, winter storms, and fire weather events
         </p>
         {% if weather_summary.severe_weather_events and weather_summary.severe_weather_events|length > 0 %}
-        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 30px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 11pt;">
+        <div style="background: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                 <thead>
                     <tr style="background: #e74c3c; color: white;">
-                        <th style="padding: 12px; text-align: left; font-weight: 500;">Date</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Event Type</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Duration</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Severity</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Magnitude</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Classification</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 500;">Data Quality</th>
+                        <th style="padding: 6px; text-align: left; font-weight: 500;">Date</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Event Type</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Duration</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Severity</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Magnitude</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Classification</th>
+                        <th style="padding: 6px; text-align: center; font-weight: 500;">Data Source</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for event in weather_summary.severe_weather_events %}
                     <tr style="border-bottom: 1px solid #e8e8e8;">
-                        <td style="padding: 10px; font-weight: 500;">{{ event.date_formatted or event.date }}</td>
-                        <td style="padding: 10px; text-align: center;">{{ event.type | title }}</td>
-                        <td style="padding: 10px; text-align: center;">{{ event.duration }}</td>
-                        <td style="padding: 10px; text-align: center;">{{ event.severity | title }}</td>
-                        <td style="padding: 10px; text-align: center;">{{ event.magnitude }}</td>
-                        <td style="padding: 10px; text-align: center;">{{ event.algorithm_magnitude }}</td>
-                        <td style="padding: 10px; text-align: center;">
-                            <span class="data-quality-badge {{ event.data_quality or 'verified' }}">
-                                {{ event.data_quality or 'verified' }}
+                        <td style="padding: 4px; font-weight: 500; white-space: nowrap;">{{ event.date_formatted or event.date }}</td>
+                        <td style="padding: 4px; text-align: center;">{{ event.type | title }}</td>
+                        <td style="padding: 4px; text-align: center;">{{ event.duration }}</td>
+                        <td style="padding: 4px; text-align: center;">{{ event.severity | title }}</td>
+                        <td style="padding: 4px; text-align: center;">{{ event.magnitude }}</td>
+                        <td style="padding: 4px; text-align: center;">{{ event.algorithm_magnitude }}</td>
+                        <td style="padding: 4px; text-align: center;">
+                            <span class="data-source-badge {{ event.data_source or 'sed' }}">
+                                {{ event.data_source or 'SED' }}
                             </span>
                         </td>
                     </tr>
@@ -605,6 +605,25 @@
             <p style="color: #7f8c8d; font-size: 10pt; margin: 5px 0 0 0;">No tornadoes, hurricanes, damaging hail, or severe wind events recorded in the past 24 months.</p>
         </div>
         {% endif %}
+        
+        <!-- Data Sources Legend -->
+        <div style="background: #f8f9fa; border: 1px solid #e8e8e8; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <h4 style="color: #2c3e50; font-size: 11pt; margin: 0 0 10px 0; font-weight: 600;">Data Sources Legend</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 9pt;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <span class="data-source-badge sed">SED</span>
+                    <span style="color: #7f8c8d;">Storm Events Database (Verified)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <span class="data-source-badge spc">SPC</span>
+                    <span style="color: #7f8c8d;">Storm Prediction Center (Preliminary)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <span class="data-source-badge ghcnd">GHCND</span>
+                    <span style="color: #7f8c8d;">Global Historical Climatology Network Daily</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Risk Assessment Overview -->

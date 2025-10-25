@@ -1,4 +1,9 @@
 """
+DEPRECATED: Abstract heat map generation service.
+Spatial reports now use MapService.generate_combined_spatial_heatmap() 
+for geographic heat maps with actual map backgrounds.
+Kept for backward compatibility with address reports.
+
 Heat map generation service for spatial weather reports.
 Creates visual heat maps showing weather risk density across geographic areas.
 """

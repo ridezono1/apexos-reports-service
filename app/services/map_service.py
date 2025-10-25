@@ -48,6 +48,9 @@ class MapService:
             chrome_options.add_argument('--disable-backgrounding-occluded-windows')
             chrome_options.add_argument('--disable-renderer-backgrounding')
             chrome_options.add_argument('--disable-field-trial-config')
+            # Fix user data directory conflict
+            chrome_options.add_argument('--disable-logging')
+            chrome_options.add_argument('--log-level=3')
             chrome_options.add_argument('--disable-back-forward-cache')
             chrome_options.add_argument('--disable-ipc-flooding-protection')
             
@@ -57,8 +60,6 @@ class MapService:
             
             # Additional options to prevent conflicts
             chrome_options.add_argument('--remote-debugging-port=0')  # Use random port
-            chrome_options.add_argument('--disable-logging')
-            chrome_options.add_argument('--log-level=3')  # Only fatal errors
 
             # Try to detect Chrome/Chromium binary location
             chrome_bin_candidates = [
@@ -303,6 +304,213 @@ class MapService:
             logger.error(f"Error generating heat map: {str(e)}")
             raise
 
+    async def generate_combined_spatial_heatmap(
+        self,
+        events: List[Dict[str, Any]],
+        risk_areas: Dict[str, Any],
+        center_lat: float,
+        center_lon: float,
+        boundary_coords: List[Tuple[float, float]],
+        title: str = "Storm Events & Risk Analysis"
+    ) -> bytes:
+        """
+        Generate combined geographic heat map showing storm event locations
+        with risk zones for roofing sales analysis.
+        
+        Args:
+            events: List of storm events with begin_lat/begin_lon coordinates
+            risk_areas: Risk assessment with high/medium/low risk areas
+            center_lat: Map center latitude
+            center_lon: Map center longitude
+            boundary_coords: Geographic boundary coordinates
+            title: Map title
+            
+        Returns:
+            PNG image bytes
+        """
+        try:
+            logger.info(f"Generating combined spatial heat map with {len(events)} events")
+            
+            # Create base map with terrain tiles for better roofing context
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=11,
+                tiles='OpenStreetMap'
+            )
+            
+            # Add boundary polygon if available
+            if boundary_coords and len(boundary_coords) > 2:
+                folium.Polygon(
+                    locations=boundary_coords,
+                    color='#3498db',
+                    fill=False,
+                    weight=3,
+                    popup='Analysis Boundary'
+                ).add_to(m)
+            
+            # Layer 1: Event heat map (storm density)
+            heat_data = []
+            for event in events:
+                try:
+                    lat = float(event.get('begin_lat') or event.get('latitude', 0))
+                    lon = float(event.get('begin_lon') or event.get('longitude', 0))
+                    
+                    if lat and lon:
+                        # Weight by severity/magnitude for roofing impact
+                        event_type = str(event.get('event_type', '')).lower()
+                        magnitude = event.get('magnitude', 1)
+                        
+                        # Higher weights for roofing-critical events
+                        weight = 1.0
+                        if 'hail' in event_type:
+                            weight = 2.0 * magnitude
+                        elif 'wind' in event_type or 'tornado' in event_type:
+                            weight = 1.5 * magnitude
+                        
+                        heat_data.append([lat, lon, weight])
+                except (ValueError, TypeError, AttributeError):
+                    continue
+            
+            if heat_data:
+                HeatMap(
+                    heat_data,
+                    min_opacity=0.2,
+                    max_opacity=0.7,
+                    radius=18,
+                    blur=22,
+                    gradient={
+                        0.0: 'blue',
+                        0.3: 'cyan',
+                        0.5: 'lime',
+                        0.7: 'yellow',
+                        1.0: 'red'
+                    }
+                ).add_to(m)
+            
+            # Layer 2: Individual storm markers for key events
+            for event in events:
+                try:
+                    lat = float(event.get('begin_lat') or event.get('latitude', 0))
+                    lon = float(event.get('begin_lon') or event.get('longitude', 0))
+                    
+                    if not (lat and lon):
+                        continue
+                    
+                    event_type = event.get('event_type', 'Unknown')
+                    event_date = event.get('date', event.get('begin_date', 'Unknown'))
+                    severity = event.get('severity', 'Unknown')
+                    
+                    # Only mark high-severity roofing-relevant events
+                    if severity in ['Severe', 'Extreme'] or 'hail' in str(event_type).lower():
+                        # Color code by event type
+                        if 'hail' in str(event_type).lower():
+                            color = 'red'
+                            icon = 'cloud'
+                        elif 'tornado' in str(event_type).lower():
+                            color = 'darkred'
+                            icon = 'warning-sign'
+                        elif 'wind' in str(event_type).lower():
+                            color = 'orange'
+                            icon = 'flag'
+                        else:
+                            color = 'blue'
+                            icon = 'info-sign'
+                        
+                        folium.Marker(
+                            location=[lat, lon],
+                            popup=f"{event_type}<br>{event_date}<br>{severity}",
+                            icon=folium.Icon(color=color, icon=icon),
+                            tooltip=f"{event_type} - {event_date}"
+                        ).add_to(m)
+                except (ValueError, TypeError, AttributeError):
+                    continue
+            
+            # Layer 3: Risk zone overlays (semi-transparent circles)
+            high_risk = risk_areas.get('high_risk_areas', {}).get('areas', [])
+            for area in high_risk:
+                coords = area.get('coordinates')
+                if coords and len(coords) == 2:
+                    folium.Circle(
+                        location=coords,
+                        radius=2000,  # 2km radius
+                        color='#e74c3c',
+                        fill=True,
+                        fillColor='#e74c3c',
+                        fillOpacity=0.15,
+                        weight=2,
+                        popup='High Risk Zone'
+                    ).add_to(m)
+            
+            medium_risk = risk_areas.get('medium_risk_areas', {}).get('areas', [])
+            for area in medium_risk:
+                coords = area.get('coordinates')
+                if coords and len(coords) == 2:
+                    folium.Circle(
+                        location=coords,
+                        radius=1500,
+                        color='#f39c12',
+                        fill=True,
+                        fillColor='#f39c12',
+                        fillOpacity=0.1,
+                        weight=1,
+                        popup='Medium Risk Zone'
+                    ).add_to(m)
+            
+            # Add legend
+            legend_html = '''
+            <div style="position: fixed;
+                        bottom: 50px; right: 50px;
+                        width: 220px;
+                        background-color: white;
+                        border: 2px solid #3498db;
+                        border-radius: 5px;
+                        padding: 10px;
+                        font-size: 12px;
+                        z-index: 9999;">
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Legend</h4>
+                <div><span style="color: red;">●</span> Hail Events</div>
+                <div><span style="color: darkred;">●</span> Tornado Events</div>
+                <div><span style="color: orange;">●</span> Wind Events</div>
+                <div style="margin-top: 8px;">
+                    <div>Heat: <span style="color: blue;">Low</span> → 
+                         <span style="color: yellow;">Medium</span> → 
+                         <span style="color: red;">High</span></div>
+                </div>
+                <div style="margin-top: 8px; font-size: 10px; color: #7f8c8d;">
+                    Density shows storm frequency<br>
+                    Markers show severe events
+                </div>
+            </div>
+            '''
+            m.get_root().html.add_child(folium.Element(legend_html))
+            
+            # Add title
+            title_html = f'''
+            <div style="position: fixed;
+                        top: 10px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        width: 500px;
+                        background-color: white;
+                        border: 2px solid #3498db;
+                        border-radius: 5px;
+                        padding: 10px;
+                        text-align: center;
+                        font-size: 16px;
+                        font-weight: bold;
+                        z-index: 9999;">
+                {title}
+            </div>
+            '''
+            m.get_root().html.add_child(folium.Element(title_html))
+            
+            # Render to PNG using existing Selenium infrastructure
+            return self._render_map_to_image(m, width=1200, height=800)
+            
+        except Exception as e:
+            logger.error(f"Error generating combined spatial heat map: {e}")
+            raise
+
     def generate_boundary_map(
         self,
         boundary_coords: List[Tuple[float, float]],
@@ -480,3 +688,15 @@ class MapService:
         except Exception as e:
             logger.error(f"Error generating location map: {str(e)}")
             raise
+
+
+# Global instance for dependency injection
+_map_service_instance = None
+
+
+def get_map_service() -> MapService:
+    """Get the global MapService instance."""
+    global _map_service_instance
+    if _map_service_instance is None:
+        _map_service_instance = MapService()
+    return _map_service_instance

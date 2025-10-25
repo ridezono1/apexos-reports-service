@@ -4,7 +4,7 @@ Template engine for rendering HTML templates with Jinja2
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -194,44 +194,47 @@ class TemplateEngine:
             if not boundary_name:
                 boundary_name = spatial_data.get('boundary_info', {}).get('name', 'Analysis Area')
 
-            # Generate maps
+            # Generate maps with error handling
             logger.info(f"Generating satellite map for {boundary_name} at {center_lat}, {center_lng}")
-            map_service = MapGenerationService()
-            satellite_map = await map_service.generate_satellite_map(
-                center_lat, center_lng, zoom_level=12, map_size=(600, 400), location_name=boundary_name
-            )
-            logger.info(f"Satellite map generated: {len(satellite_map)} bytes")
+            try:
+                map_service = MapGenerationService()
+                satellite_map = await map_service.generate_satellite_map(
+                    center_lat, center_lng, zoom_level=12, map_size=(600, 400), location_name=boundary_name
+                )
+                logger.info(f"Satellite map generated: {len(satellite_map)} bytes")
+            except Exception as e:
+                logger.warning(f"Satellite map generation failed: {e}, using placeholder")
+                satellite_map = self._create_placeholder_map(600, 400, "Satellite View")
 
-            # Generate heat maps
-            logger.info(f"Generating heat maps with {len(coordinates)} boundary coordinates")
-            heatmap_service = get_heatmap_service()
+            # Generate combined geographic heat map with error handling
+            logger.info(f"Generating combined geographic heat map with {len(coordinates)} boundary coordinates")
+            try:
+                from app.services.plotly_map_service import get_plotly_map_service
+                map_service = get_plotly_map_service()
 
-            # Risk heat map
-            logger.info("Generating risk heat map...")
-            risk_heatmap = heatmap_service.generate_risk_heatmap(
-                coordinates,
-                spatial_data.get('risk_assessment', {}),
-                width=600,
-                height=400
-            )
-            logger.info(f"Risk heat map generated: {len(risk_heatmap)} bytes")
+                # Extract all events from spatial data
+                all_events = self._extract_all_events_from_spatial_data(spatial_data)
+                logger.info(f"Extracted {len(all_events)} events for heat map")
 
-            # Event density heat map
-            logger.info("Generating event density heat map...")
-            event_heatmap = heatmap_service.generate_event_density_heatmap(
-                coordinates,
-                spatial_data.get('grid_data', []),
-                width=600,
-                height=400
-            )
-            logger.info(f"Event density heat map generated: {len(event_heatmap)} bytes")
+                # Generate combined heat map with events AND risk zones
+                combined_heatmap = await map_service.generate_combined_spatial_heatmap(
+                    events=all_events,
+                    risk_areas=spatial_data.get('risk_assessment', {}),
+                    center_lat=center_lat,
+                    center_lon=center_lng,
+                    boundary_coords=coordinates,
+                    title=f"{boundary_name} Storm Analysis"
+                )
+                logger.info(f"Combined heat map generated: {len(combined_heatmap)} bytes")
+            except Exception as e:
+                logger.warning(f"Combined heat map generation failed: {e}, using placeholder")
+                combined_heatmap = self._create_placeholder_map(1200, 800, "Storm Events Heat Map")
 
             # Convert maps to base64
             logger.info("Converting maps to base64...")
             satellite_map_base64 = base64.b64encode(satellite_map).decode('utf-8')
-            risk_heatmap_base64 = base64.b64encode(risk_heatmap).decode('utf-8')
-            event_heatmap_base64 = base64.b64encode(event_heatmap).decode('utf-8')
-            logger.info(f"Base64 conversion complete - satellite: {len(satellite_map_base64)}, risk: {len(risk_heatmap_base64)}, event: {len(event_heatmap_base64)}")
+            combined_heatmap_base64 = base64.b64encode(combined_heatmap).decode('utf-8')
+            logger.info(f"Base64 conversion complete - satellite: {len(satellite_map_base64)}, combined: {len(combined_heatmap_base64)}")
 
             # Load and encode logo
             logo_path = Path(__file__).parent.parent.parent / "templates" / "apexos-icon.png"
@@ -270,8 +273,7 @@ class TemplateEngine:
                 'route_optimization': spatial_data.get('route_optimization', {}),
                 'charts': spatial_data.get('charts', {}),  # Add charts for visualizations
                 'satellite_map_base64': satellite_map_base64,
-                'risk_heatmap_base64': risk_heatmap_base64,
-                'event_heatmap_base64': event_heatmap_base64,
+                'combined_heatmap_base64': combined_heatmap_base64,
                 'logo_base64': logo_base64,
                 'generated_at': self._get_current_time(),
                 'report_id': options.get('report_id') if options else None,
@@ -280,8 +282,7 @@ class TemplateEngine:
             
             logger.info(f"Template context prepared with heat map variables:")
             logger.info(f"  satellite_map_base64: {len(context['satellite_map_base64'])} chars")
-            logger.info(f"  risk_heatmap_base64: {len(context['risk_heatmap_base64'])} chars")
-            logger.info(f"  event_heatmap_base64: {len(context['event_heatmap_base64'])} chars")
+            logger.info(f"  combined_heatmap_base64: {len(context['combined_heatmap_base64'])} chars")
 
             return template.render(context)
 
@@ -521,6 +522,74 @@ class TemplateEngine:
             return "N/A"
         return str(date_str)
     
+    def _create_placeholder_map(self, width: int, height: int, title: str) -> bytes:
+        """Create a placeholder map image when map generation fails."""
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # Create a simple placeholder image
+            img = Image.new('RGB', (width, height), color='#f8f9fa')
+            draw = ImageDraw.Draw(img)
+            
+            # Add border
+            draw.rectangle([0, 0, width-1, height-1], outline='#dee2e6', width=2)
+            
+            # Add title text
+            try:
+                font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 24)
+            except:
+                font = ImageFont.load_default()
+            
+            text_bbox = draw.textbbox((0, 0), title, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            
+            x = (width - text_width) // 2
+            y = (height - text_height) // 2
+            
+            draw.text((x, y), title, fill='#6c757d', font=font)
+            
+            # Add "Map unavailable" text
+            try:
+                small_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 16)
+            except:
+                small_font = ImageFont.load_default()
+            
+            unavailable_text = "Map generation unavailable"
+            text_bbox = draw.textbbox((0, 0), unavailable_text, font=small_font)
+            text_width = text_bbox[2] - text_bbox[0]
+            x = (width - text_width) // 2
+            y = y + text_height + 20
+            
+            draw.text((x, y), unavailable_text, fill='#adb5bd', font=small_font)
+            
+            # Convert to bytes
+            from io import BytesIO
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            return buffer.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Failed to create placeholder map: {e}")
+            # Return minimal 1x1 pixel image
+            from io import BytesIO
+            buffer = BytesIO()
+            img = Image.new('RGB', (1, 1), color='white')
+            img.save(buffer, format='PNG')
+            return buffer.getvalue()
+
+    def _extract_all_events_from_spatial_data(self, spatial_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all weather events with coordinates from spatial analysis."""
+        events = []
+        weather_events = spatial_data.get('weather_events', {})
+        raw_events = weather_events.get('raw_events', [])
+        
+        for event in raw_events:
+            if event.get('begin_lat') and event.get('begin_lon'):
+                events.append(event)
+        
+        return events
+
     def _get_current_time(self) -> str:
         """Get current timestamp"""
         from datetime import datetime
