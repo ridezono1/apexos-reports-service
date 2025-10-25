@@ -12,7 +12,7 @@ from app.services.noaa_weather_service import get_noaa_weather_service
 
 logger = get_logger(__name__)
 
-# Weather thresholds from SkyLink standards
+# Weather thresholds from industry standards
 WIND_MIN_ACTIONABLE = settings.alert_wind_min_speed_mph
 WIND_SEVERE = settings.wind_severe_threshold
 WIND_MODERATE = settings.wind_moderate_threshold
@@ -370,7 +370,7 @@ class WeatherDataService:
                     "trend_slope": self._calculate_trend_slope(precipitations),
                 }
 
-            # Wind trends using SkyLink thresholds
+            # Wind trends using industry thresholds
             if wind_speeds:
                 trends["wind"] = {
                     "average": sum(wind_speeds) / len(wind_speeds),
@@ -541,7 +541,7 @@ class WeatherDataService:
                 "drought_periods": self._identify_drought_periods(precipitation),
             }
 
-            # Wind analysis using SkyLink thresholds
+            # Wind analysis using industry thresholds
             if wind_speeds:
                 analysis["wind"] = {
                     "average": sum(wind_speeds) / len(wind_speeds),

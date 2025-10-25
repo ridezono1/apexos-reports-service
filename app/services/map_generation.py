@@ -1,6 +1,5 @@
 """
-Map generation service for weather reports
-Based on SkyLink's map generation capabilities
+Map generation service for weather reports using Selenium and Folium.
 """
 
 import io

@@ -1,6 +1,6 @@
 """
 Spatial analysis service for boundary-based weather intelligence reports.
-Implements SkyLink's spatial report capabilities.
+Implements spatial report capabilities for geographic area analysis.
 """
 
 import httpx

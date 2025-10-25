@@ -1,6 +1,5 @@
 """
 Service for geocoding and address autocomplete using Google Maps API.
-Based on SkyLink's geocoding service.
 """
 
 import httpx

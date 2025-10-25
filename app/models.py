@@ -78,7 +78,7 @@ class TemplateInfo(BaseModel):
     description: str = Field(..., description="Template description")
     supported_formats: List[ReportFormat] = Field(..., description="Supported output formats")
 
-# SkyLink-specific models for comprehensive weather and spatial reports
+# Enhanced models for comprehensive weather and spatial reports
 
 class WeatherReportType(str, Enum):
     """Weather report type enumeration."""
@@ -297,10 +297,10 @@ class InterpolatedWeatherData(BaseModel):
     max_value: Optional[float] = None
     average_value: Optional[float] = None
 
-# Enhanced request models for SkyLink integration
+# Enhanced request models for comprehensive integration
 
 class WeatherReportCreate(BaseModel):
-    """Schema for creating weather reports with SkyLink capabilities."""
+    """Schema for creating weather reports with comprehensive capabilities."""
     title: str = Field(..., min_length=1, max_length=200, description="Report title")
     type: WeatherReportType = Field(..., description="Report type")
     location: str = Field(..., description="Report location")

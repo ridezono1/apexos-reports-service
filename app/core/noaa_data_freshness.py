@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 
 
 # NOAA Storm Events Database update lag (in days)
-NOAA_UPDATE_LAG_DAYS = 90  # Conservative estimate (75-120 days)
+NOAA_UPDATE_LAG_DAYS = 120  # Official range: 75-120 days, use worst-case  # Conservative estimate (75-120 days)
 
 
 def get_noaa_data_freshness_date(reference_date: Optional[date] = None) -> date:
@@ -124,15 +124,16 @@ def format_data_disclaimer(freshness_info: Dict[str, Any]) -> str:
     """
     if freshness_info["is_complete"]:
         return (
-            f"Data Source: NOAA Storm Events Database. "
+            f"Data Source: NOAA Storm Events Database (verified). "
             f"Data current through {freshness_info['freshness_date_formatted']}."
         )
     else:
         return (
-            f"Data Source: NOAA Storm Events Database. "
-            f"Complete data available through {freshness_info['freshness_date_formatted']}. "
-            f"Recent events (last ~{freshness_info['days_lag']} days) may not be included due to "
-            f"NOAA's reporting lag (typical 75-120 day update cycle)."
+            f"Data Sources:\n"
+            f"• Historical (>{freshness_info['days_lag']} days ago): NOAA Storm Events Database (verified)\n"
+            f"• Recent (last {freshness_info['days_lag']} days): NWS Storm Prediction Center Preliminary Reports\n\n"
+            f"Complete verified data available through {freshness_info['freshness_date_formatted']}. "
+            f"Preliminary reports included for recent period. Final verification typically takes 75-120 days."
         )
 
 

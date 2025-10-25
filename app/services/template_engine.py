@@ -52,6 +52,70 @@ class TemplateEngine:
             template = self.env.get_template(template_path)
             
             # Prepare template context
+            from datetime import datetime, timedelta
+            
+            # Default to 24 months analysis period
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=730)  # 24 months
+            
+            # Load logo
+            import base64
+            from pathlib import Path
+            logo_path = Path(__file__).parent.parent.parent / "templates" / "apexos-icon.png"
+            logo_base64 = ""
+            if logo_path.exists():
+                with open(logo_path, 'rb') as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+            
+            # Generate maps
+            from app.services.map_generation import MapGenerationService
+            map_service = MapGenerationService()
+            coordinates = weather_data.get('coordinates', (0, 0))
+            lat, lng = coordinates if len(coordinates) == 2 else (0, 0)
+            address = weather_data.get('location', 'Unknown Location')
+            
+            satellite_map = await map_service.generate_satellite_map(
+                lat, lng, zoom_level=18, map_size=(600, 400), location_name=address
+            )
+            street_map = await map_service.generate_street_map(
+                lat, lng, zoom_level=15, map_size=(600, 400), location_name=address
+            )
+            
+            satellite_map_base64 = base64.b64encode(satellite_map).decode('utf-8')
+            street_map_base64 = base64.b64encode(street_map).decode('utf-8')
+            
+            # Prepare weather summary from weather_data
+            weather_summary = {
+                'max_wind_speed': weather_data.get('max_wind_speed', 0),
+                'total_events': weather_data.get('total_events', 0),
+                'severe_events': weather_data.get('severe_events', 0),
+                'hail_events': weather_data.get('hail_events', 0),
+                'max_hail_size': weather_data.get('max_hail_size', 0),
+                'temp_range': weather_data.get('temp_range', 'N/A')
+            }
+            
+            # Prepare data freshness info
+            data_freshness = {
+                'disclaimer': weather_data.get('data_disclaimer', 'Data source: NOAA Storm Events Database'),
+                'warning_message': weather_data.get('data_warning', 'Data may be incomplete for recent periods')
+            }
+            
+            # Prepare risk assessment with risk_details
+            risk_assessment_data = weather_data.get('riskAssessment', {})
+            if not isinstance(risk_assessment_data, dict):
+                risk_assessment_data = {}
+            
+            risk_assessment = {
+                'risk_details': risk_assessment_data.get('risk_details', {
+                    'hail': {'level': 'Low', 'description': 'Minimal hail risk'},
+                    'wind': {'level': 'Low', 'description': 'Minimal wind risk'},
+                    'tornado': {'level': 'Low', 'description': 'Minimal tornado risk'},
+                    'flooding': {'level': 'Low', 'description': 'Minimal flooding risk'}
+                }),
+                'overall_risk': risk_assessment_data.get('overall_risk', 'Low'),
+                'recommendations': risk_assessment_data.get('recommendations', [])
+            }
+            
             context = {
                 'weather_data': weather_data,
                 'options': options or {},
@@ -60,7 +124,24 @@ class TemplateEngine:
                 'current': weather_data.get('current', {}),
                 'forecast': weather_data.get('forecast', {}),
                 'historical': weather_data.get('historical', {}),
-                'risk_assessment': weather_data.get('riskAssessment', {})
+                'risk_assessment': risk_assessment,
+                'analysis_period': {
+                    'start': start_date.strftime('%Y-%m-%d'),
+                    'end': end_date.strftime('%Y-%m-%d'),
+                    'period': '24_months'
+                },
+                'weather_summary': weather_summary,
+                'data_freshness': data_freshness,
+                'logo_base64': logo_base64,
+                'satellite_map_base64': satellite_map_base64,
+                'street_map_base64': street_map_base64,
+                # Add property_info for address templates
+                'property_info': {
+                    'address': weather_data.get('location', 'Unknown Location'),
+                    'coordinates': weather_data.get('coordinates', (0, 0)),
+                    'geocoded_address': weather_data.get('location', 'Unknown Location'),
+                    'address_components': {}
+                }
             }
             
             return template.render(context)
@@ -234,6 +315,15 @@ class TemplateEngine:
             coordinates = property_info.get('coordinates', (0, 0))
             lat, lng = coordinates
             address = property_info.get('geocoded_address', 'Unknown Location')
+            
+            # Ensure property_info has all required fields
+            if not property_info:
+                property_info = {
+                    'address': address_data.get('location', 'Unknown Location'),
+                    'coordinates': (lat, lng),
+                    'geocoded_address': address,
+                    'address_components': {}
+                }
 
             # Generate maps
             map_service = MapGenerationService()

@@ -110,6 +110,44 @@ async def general_exception_handler(request: Request, exc: Exception):
 app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
 app.include_router(geocoding.router, prefix="/api/v1/geocoding", tags=["geocoding"])
 
+# Startup and shutdown event handlers
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    try:
+        from app.services.background_cache_refresh_service import get_cache_refresh_service
+        
+        # Start background cache refresh service
+        cache_service = get_cache_refresh_service()
+        if cache_service.start():
+            logger.info("Background cache refresh service started")
+            
+            # Optional: Warmup cache on startup (last 3 years)
+            # This can be disabled in production if startup time is critical
+            if os.getenv("CACHE_WARMUP_ON_STARTUP", "true").lower() == "true":
+                logger.info("Starting cache warmup...")
+                await cache_service.warmup_cache()
+                logger.info("Cache warmup completed")
+        else:
+            logger.warning("Failed to start background cache refresh service")
+            
+    except Exception as e:
+        logger.error(f"Error during startup: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    try:
+        from app.services.background_cache_refresh_service import get_cache_refresh_service
+        
+        # Stop background cache refresh service
+        cache_service = get_cache_refresh_service()
+        cache_service.stop()
+        logger.info("Background cache refresh service stopped")
+        
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
 @app.get("/")
 async def root():
     """Root endpoint with service information"""

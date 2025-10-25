@@ -5,14 +5,14 @@ uvicorn[standard]>=0.24.0
 # Template engine
 jinja2>=3.1.0
 
-# PDF generation (SkyLink uses ReportLab)
+# PDF generation (ReportLab)
 reportlab>=4.0.0
 weasyprint>=60.0
 
 # Excel generation
 openpyxl>=3.1.0
 
-# Map generation (SkyLink capabilities)
+# Map generation capabilities
 folium>=0.14.0
 requests>=2.31.0
 
@@ -45,6 +45,15 @@ googlemaps>=4.10.0
 
 # Error tracking
 sentry-sdk>=1.40.0
+
+# Date utilities
+python-dateutil>=2.8.0
+
+# Analytics engine for fast CSV queries
+duckdb>=0.10.0,<1.0.0
+
+# Background job scheduling
+apscheduler>=3.10.0
 
 # Development dependencies
 pytest>=7.4.0

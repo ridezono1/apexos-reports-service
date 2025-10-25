@@ -1,6 +1,5 @@
 """
 Pydantic schemas for geocoding and address autocomplete.
-Based on SkyLink's geocoding schemas.
 """
 
 from typing import Optional, List

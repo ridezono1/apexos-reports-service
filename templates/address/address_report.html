@@ -240,6 +240,32 @@
             color: #27ae60;
         }
 
+        .data-quality-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 8pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .data-quality-badge.verified {
+            background: #f0f9f4;
+            color: #27ae60;
+        }
+
+        .data-quality-badge.preliminary {
+            background: #fff9e6;
+            color: #f39c12;
+            font-style: italic;
+        }
+
+        .data-quality-badge.current {
+            background: #e3f2fd;
+            color: #2196f3;
+        }
+
         .risk-factors {
             margin-top: 10px;
             font-size: 9pt;
@@ -551,6 +577,7 @@
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Severity</th>
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Magnitude</th>
                         <th style="padding: 12px; text-align: center; font-weight: 500;">Classification</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 500;">Data Quality</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -562,6 +589,11 @@
                         <td style="padding: 10px; text-align: center;">{{ event.severity | title }}</td>
                         <td style="padding: 10px; text-align: center;">{{ event.magnitude }}</td>
                         <td style="padding: 10px; text-align: center;">{{ event.algorithm_magnitude }}</td>
+                        <td style="padding: 10px; text-align: center;">
+                            <span class="data-quality-badge {{ event.data_quality or 'verified' }}">
+                                {{ event.data_quality or 'verified' }}
+                            </span>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

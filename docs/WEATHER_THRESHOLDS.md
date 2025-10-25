@@ -1,6 +1,6 @@
 # Weather Thresholds Documentation
 
-This document explains the wind speed and hail size thresholds used in the Weather Reports Service, based on SkyLink standards for the roofing and property services industry.
+This document explains the wind speed and hail size thresholds used in the Weather Reports Service, based on industry standards for the roofing and property services industry.
 
 ## Overview
 
@@ -241,5 +241,5 @@ Update thresholds only when:
 ---
 
 **Last Updated**: 2025-01-07
-**Based On**: SkyLink Production Standards
+**Based On**: Industry Production Standards
 **Industry**: Roofing and Property Services

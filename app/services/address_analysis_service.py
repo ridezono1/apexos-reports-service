@@ -1,6 +1,6 @@
 """
 Property-specific address analysis service for location-based weather intelligence.
-Implements SkyLink's address report capabilities.
+Implements address report capabilities for property-specific weather analysis.
 """
 
 from typing import Dict, Any, List, Optional
@@ -14,7 +14,7 @@ from app.services.geocoding_service import get_geocoding_service
 
 logger = get_logger(__name__)
 
-# Weather thresholds from SkyLink standards
+# Weather thresholds from industry standards
 HAIL_MIN_ACTIONABLE = settings.alert_hail_min_size_inches
 HAIL_SEVERE = settings.hail_severe_threshold
 HAIL_EXTREME = settings.hail_extreme_threshold
@@ -462,7 +462,7 @@ class AddressAnalysisService:
         """
         Format severe weather events for the table.
 
-        Applies SkyLink business thresholds:
+        Applies industry business thresholds:
         - Wind: ≥60 mph (damaging winds threshold)
         - Hail: ≥1 inch (property damage threshold)
         - Tornadoes: All tornadoes included regardless of EF rating
@@ -989,7 +989,7 @@ class AddressAnalysisService:
                 risk_score += 0.3
                 risk_factors.append(f"{len(severe_wind)} severe wind events")
 
-        # Check current wind conditions using SkyLink thresholds
+        # Check current wind conditions using industry thresholds
         current_wind = current_weather.get("wind_speed", 0)
         # Ensure current_wind is a number
         try:
@@ -1488,7 +1488,7 @@ class AddressAnalysisService:
             weather_events = weather_data["weather_events"]
             risk_details = risk_assessment["risk_details"]
 
-            # Current weather alerts using SkyLink thresholds
+            # Current weather alerts using industry thresholds
             current_wind = current_weather.get("wind_speed", 0)
             # Ensure current_wind is a number
             try:

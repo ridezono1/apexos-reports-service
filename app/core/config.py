@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # File storage (local only)
     temp_dir: str = "/tmp/reports"
     max_file_size_mb: int = 50
+    
+    # Cache duration configuration (in hours)
+    cache_duration_historical_days: int = 30  # Historical years (>2 years old)
+    cache_duration_previous_year_days: int = 7  # Previous year (1-2 years old)
+    cache_duration_current_year_hours: int = 24  # Current year (last 12 months)
 
     # Report generation
     default_template: str = "address_report"
@@ -60,7 +65,7 @@ class Settings(BaseSettings):
             return []
         return [key.strip() for key in self.api_key_list.split(",") if key.strip()]
 
-    # Weather alert thresholds (based on SkyLink standards)
+    # Weather alert thresholds (based on industry standards)
     # Hail size thresholds (in inches)
     alert_hail_min_size_inches: float = 1.0  # Minimum actionable hail size
     hail_severe_threshold: float = 1.0       # Severe: ≥1.0 inch

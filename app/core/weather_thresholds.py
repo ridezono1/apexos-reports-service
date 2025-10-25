@@ -1,5 +1,5 @@
 """
-Weather thresholds and classifications based on SkyLink standards.
+Weather thresholds and classifications based on industry standards.
 
 This module defines actionable thresholds for weather events that represent
 business opportunities for property damage assessment, inspections, and

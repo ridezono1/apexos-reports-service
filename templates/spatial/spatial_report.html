@@ -251,6 +251,32 @@
             background-color: #f8f9fa;
         }
 
+        .data-quality-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 8pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .data-quality-badge.verified {
+            background: #f0f9f4;
+            color: #27ae60;
+        }
+
+        .data-quality-badge.preliminary {
+            background: #fff9e6;
+            color: #f39c12;
+            font-style: italic;
+        }
+
+        .data-quality-badge.current {
+            background: #e3f2fd;
+            color: #2196f3;
+        }
+
         /* Business Impact */
         .impact-section {
             background: linear-gradient(135deg, #16a085 0%, #1abc9c 100%);
@@ -565,6 +591,7 @@
                 <th>Event Type</th>
                 <th style="text-align: center;">Count</th>
                 <th style="text-align: center;">Percentage</th>
+                <th style="text-align: center;">Data Quality</th>
             </tr>
         </thead>
         <tbody>
@@ -573,6 +600,9 @@
                 <td>{{ event_type | title }}</td>
                 <td style="text-align: center;"><strong>{{ count }}</strong></td>
                 <td style="text-align: center;">{{ "%.1f"|format((count / weather_summary.total_events * 100) if weather_summary.total_events > 0 else 0) }}%</td>
+                <td style="text-align: center;">
+                    <span class="data-quality-badge verified">verified</span>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

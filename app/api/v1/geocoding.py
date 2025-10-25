@@ -1,6 +1,5 @@
 """
 API endpoints for geocoding and address autocomplete.
-Based on SkyLink's geocoding API endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query

@@ -107,7 +107,7 @@ class ReportGenerator:
         format: ReportFormat = ReportFormat.PDF,
         options: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate an address-specific weather report using SkyLink's address analysis from current date"""
+        """Generate an address-specific weather report using address analysis from current date"""
         
         report_id = str(uuid.uuid4())
         options = options or {}
@@ -163,7 +163,7 @@ class ReportGenerator:
         format: ReportFormat = ReportFormat.PDF,
         options: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate a spatial weather report using SkyLink's spatial analysis from current date"""
+        """Generate a spatial weather report using spatial analysis from current date"""
         
         report_id = str(uuid.uuid4())
         options = options or {}
@@ -340,7 +340,7 @@ class ReportGenerator:
         format: ReportFormat,
         options: Dict[str, Any]
     ):
-        """Generate address report asynchronously using SkyLink's address analysis"""
+        """Generate address report asynchronously using address analysis"""
         
         try:
             # Perform comprehensive address analysis
@@ -398,7 +398,7 @@ class ReportGenerator:
         format: ReportFormat,
         options: Dict[str, Any]
     ):
-        """Generate spatial report asynchronously using SkyLink's spatial analysis"""
+        """Generate spatial report asynchronously using spatial analysis"""
 
         try:
             # Perform comprehensive spatial analysis
