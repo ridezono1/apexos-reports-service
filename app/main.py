@@ -16,6 +16,14 @@ import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 import logging
 
+# Check if NOAA is disabled via environment variable
+if os.getenv("DISABLE_NOAA") == "true":
+    print("NOAA data fetching is disabled via DISABLE_NOAA environment variable")
+    # Set environment variable to disable NOAA in the application
+    os.environ["WEATHER_PROVIDER"] = "disabled"
+    # Also disable NOAA data fetching completely
+    os.environ["NOAA_DATA_FETCHING_ENABLED"] = "false"
+
 from app.api.v1 import reports, geocoding
 from app.core.config import settings
 

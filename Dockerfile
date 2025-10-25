@@ -1,5 +1,8 @@
 # Multi-stage build for smaller image size
+# FORCE COMPLETE REBUILD - v2 - Bust all caches
+ARG CACHEBUST=20251025-1500
 FROM python:3.11-slim AS builder
+# Cache buster: ${CACHEBUST}
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +22,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Final stage
+ARG CACHEBUST=20251025-1500
 FROM python:3.11-slim
+# Cache buster: ${CACHEBUST}
 
 # Set working directory
 WORKDIR /app
@@ -75,7 +80,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Copy Python packages from builder to /usr/local for system-wide access
 COPY --from=builder /root/.local /usr/local
 
-# Copy application code
+# Copy application code - FORCE REBUILD v2
+ARG CACHEBUST=20251025-1500
+RUN echo "Rebuilding app layer - Cache bust: ${CACHEBUST}"
 COPY app/ ./app/
 COPY templates/ ./templates/
 COPY start.sh ./
@@ -109,4 +116,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Run the application
-CMD ["./start.sh"]
+CMD if [ "$DISABLE_NOAA" = "true" ]; then \
+        echo "NOAA data fetching is disabled via DISABLE_NOAA environment variable"; \
+        echo "Service will start but NOAA data will not be fetched"; \
+        export NOAA_DATA_FETCHING_ENABLED=false; \
+    fi; \
+    ./start.sh

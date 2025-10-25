@@ -629,6 +629,11 @@ class NOAAWeatherService:
         end_date: date
     ) -> List[Dict[str, Any]]:
         """Fetch severe weather events from NWS Storm Events Database via CSV files."""
+        # Check if NOAA data fetching is disabled
+        if os.getenv("NOAA_DATA_FETCHING_ENABLED") == "false":
+            logger.info("NOAA data fetching is disabled via NOAA_DATA_FETCHING_ENABLED environment variable")
+            return []
+        
         try:
             events = []
             
