@@ -279,4 +279,4 @@ To add a new report type:
 1. Create a new service in `app/services/`
 2. Add templates in `templates/[report_type]/`
 3. Add routes in `app/api/routes/`
-4. Register in `app/main.py`
+4. Register in `app/main.py`# Trigger deployment Sat Oct 25 11:19:42 CDT 2025
